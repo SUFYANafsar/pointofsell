@@ -130,7 +130,22 @@
                         {!! Form::text('total_amount_recovered', 0, [
                             'class' => 'form-control input_number',
                             'placeholder' => __('stock_adjustment.total_amount_recovered'),
+                            'id' => 'total_amount_recovered',
                         ]) !!}
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="form-group" id="recovered_account_div" style="display: none;">
+                        {!! Form::label('recovered_account_id', __('account.payment_account') . ':') !!}
+                        <div class="input-group">
+                            <span class="input-group-addon">
+                                <i class="fas fa-money-bill-alt"></i>
+                            </span>
+                            {!! Form::select('recovered_account_id', $accounts, null, [
+                                'class' => 'form-control select2',
+                                'id' => 'recovered_account_id',
+                            ]) !!}
+                        </div>
                     </div>
                 </div>
                 <div class="col-sm-4">
@@ -157,6 +172,17 @@
     <script src="{{ asset('js/stock_adjustment.js?v=' . $asset_v) }}"></script>
     <script type="text/javascript">
         __page_leave_confirmation('#stock_adjustment_form');
+        
+        // Show/hide account dropdown based on amount recovered
+        $(document).on('input change', '#total_amount_recovered', function() {
+            var amount = parseFloat($(this).val()) || 0;
+            if (amount > 0) {
+                $('#recovered_account_div').show();
+            } else {
+                $('#recovered_account_div').hide();
+                $('#recovered_account_id').val(null).trigger('change');
+            }
+        });
     </script>
 @endsection
 

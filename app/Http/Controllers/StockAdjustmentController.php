@@ -162,8 +162,14 @@ class StockAdjustmentController extends Controller
 
         $business_locations = BusinessLocation::forDropdown($business_id);
 
+        // Load accounts dropdown for amount recovered (without "None" option)
+        $accounts = [];
+        if ($this->moduleUtil->isModuleEnabled('account')) {
+            $accounts = \App\Account::forDropdown($business_id, false);
+        }
+
         return view('stock_adjustment.create')
-                ->with(compact('business_locations'));
+                ->with(compact('business_locations', 'accounts'));
     }
 
     /**
@@ -242,6 +248,22 @@ class StockAdjustmentController extends Controller
                 $this->transactionUtil->mapPurchaseSell($business, $stock_adjustment->stock_adjustment_lines, 'stock_adjustment');
 
                 event(new StockAdjustmentCreatedOrModified($stock_adjustment, 'added'));
+
+                // Create account transaction if amount recovered > 0 and account is selected
+                $recovered_account_id = $request->input('recovered_account_id');
+                if (!empty($input_data['total_amount_recovered']) && $input_data['total_amount_recovered'] > 0 && !empty($recovered_account_id)) {
+                    if ($this->moduleUtil->isModuleEnabled('account', $business_id)) {
+                        \App\AccountTransaction::createAccountTransaction([
+                            'amount' => $input_data['total_amount_recovered'],
+                            'account_id' => $recovered_account_id,
+                            'type' => 'credit',
+                            'operation_date' => $input_data['transaction_date'],
+                            'created_by' => $user_id,
+                            'transaction_id' => $stock_adjustment->id,
+                            'note' => 'Amount recovered from stock adjustment: ' . $input_data['ref_no'],
+                        ]);
+                    }
+                }
 
                 $this->transactionUtil->activityLog($stock_adjustment, 'added', null, [], false);
             }
@@ -343,6 +365,13 @@ class StockAdjustmentController extends Controller
                                     ->where('type', 'stock_adjustment')
                                     ->with(['stock_adjustment_lines'])
                                     ->first();
+
+                // Delete account transaction if exists
+                if ($this->moduleUtil->isModuleEnabled('account')) {
+                    \App\AccountTransaction::where('transaction_id', $stock_adjustment->id)
+                        ->where('transaction_payment_id', null)
+                        ->delete();
+                }
 
                 //Add deleted product quantity to available quantity
                 $stock_adjustment_lines = $stock_adjustment->stock_adjustment_lines;

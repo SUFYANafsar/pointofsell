@@ -374,8 +374,8 @@ var dateRangeSettings = {
     showDropdowns : true,
     linkedCalendars : false,
     ranges: ranges,
-    startDate: financial_year.start,
-    endDate: financial_year.end,
+    startDate: moment().subtract(29, 'days'),
+    endDate: moment(),
     locale: {
         cancelLabel: LANG.clear,
         applyLabel: LANG.apply,

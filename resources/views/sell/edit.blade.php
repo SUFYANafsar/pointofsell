@@ -125,7 +125,22 @@
 					</small>
 				</div>
 
-				<div class="col-md-3">
+				<div class="col-md-2">
+		          <div class="form-group">
+		            <div class="multi-input">
+		          
+		              {!! Form::label('sell_price_type', __('Sell Price Type') . ':') !!} @show_tooltip(__('Tooltip for Sell Price Type'))
+		              <br/>
+		              	{!! Form::select('sell_price_type', 
+		              	['whole_sell_price' => __('Whole Sell Price'), 
+		              		'regular_sell_price' => __('Regular Sell Price')],
+		              		null, 
+		              	['class' => 'form-control  pull-left', 'id' => 'sell_price_type', 'required' => true]); !!}
+		            </div>
+		          </div>
+		        </div>
+
+				<div class="col-md-2">
 		          <div class="form-group">
 		            <div class="multi-input">
 		            	@php
@@ -156,7 +171,7 @@
 					</div>
 				</div>
 				@endif
-				<div class="@if(!empty($commission_agent)) col-sm-3 @else col-sm-4 @endif">
+				<div class="@if(!empty($commission_agent)) col-sm-2 @else col-sm-3 @endif">
 					<div class="form-group">
 						{!! Form::label('transaction_date', __('sale.sale_date') . ':*') !!}
 						<div class="input-group">

@@ -213,7 +213,7 @@
           </div>
         </div>
         @if(!empty($accounts))
-          <div class="col-md-6">
+          <div class="col-md-6 hide">
             <div class="form-group">
               {!! Form::label("account_id" , __('lang_v1.payment_account') . ':') !!}
               <div class="input-group">

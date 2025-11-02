@@ -43,11 +43,13 @@ class AddAccountTransaction
         }
 
         // //Create new account transaction
-        if (! empty($event->formInput['account_id']) && $event->transactionPayment->method != 'advance') {
+        // Check both formInput and transactionPayment for account_id (formInput takes priority)
+        $account_id = !empty($event->formInput['account_id']) ? $event->formInput['account_id'] : (!empty($event->transactionPayment->account_id) ? $event->transactionPayment->account_id : null);
+        if (! empty($account_id) && $event->transactionPayment->method != 'advance') {
             $type = ! empty($event->transactionPayment->payment_type) ? $event->transactionPayment->payment_type : AccountTransaction::getAccountTransactionType($event->formInput['transaction_type']);
             $account_transaction_data = [
                 'amount' => $event->formInput['amount'],
-                'account_id' => $event->formInput['account_id'],
+                'account_id' => $account_id,
                 'type' => $type,
                 'operation_date' => $event->transactionPayment->paid_on,
                 'created_by' => $event->transactionPayment->created_by,

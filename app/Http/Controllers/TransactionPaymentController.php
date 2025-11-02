@@ -89,8 +89,30 @@ class TransactionPaymentController extends Controller
                     $inputs['transaction_no'] = $request->input('transaction_no_3');
                 }
 
-                if (! empty($request->input('account_id')) && $inputs['method'] != 'advance') {
-                    $inputs['account_id'] = $request->input('account_id');
+                // Auto-link account based on payment method mapping
+                if (!empty($inputs['method']) && $inputs['method'] != 'advance') {
+                    // First check if account_id is explicitly provided
+                    if (!empty($request->input('account_id'))) {
+                        $inputs['account_id'] = $request->input('account_id');
+                    } else {
+                        // Auto-link based on payment method mapping
+                        $business = \App\Business::find($business_id);
+                        if ($business && !empty($business->payment_method_account_mapping)) {
+                            $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                                ? $business->payment_method_account_mapping 
+                                : json_decode($business->payment_method_account_mapping, true);
+                            
+                            if (!empty($payment_method_account_mapping[$inputs['method']])) {
+                                $inputs['account_id'] = $payment_method_account_mapping[$inputs['method']];
+                            } else {
+                                // Payment method not mapped to any account - throw error
+                                throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $inputs['method']]));
+                            }
+                        } else {
+                            // No mapping configured - throw error
+                            throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $inputs['method']]));
+                        }
+                    }
                 }
 
                 $prefix_type = 'purchase_payment';
@@ -123,7 +145,13 @@ class TransactionPaymentController extends Controller
                         $this->transactionUtil->addCashDenominations($tp, $request->input('denominations'));
                     }
 
+                    // Ensure account_id is in formInput for the event listener
                     $inputs['transaction_type'] = $transaction->type;
+                    if (!empty($inputs['account_id'])) {
+                        $inputs['account_id'] = $inputs['account_id'];
+                    } elseif (!empty($tp->account_id)) {
+                        $inputs['account_id'] = $tp->account_id;
+                    }
                     event(new TransactionPaymentAdded($tp, $inputs));
                 }
 

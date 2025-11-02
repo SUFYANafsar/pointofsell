@@ -1,3 +1,1 @@
-[2025-11-02 21:22:05] live.EMERGENCY: File:/Applications/MAMP/htdocs/pointofsell/app/Utils/TransactionUtil.phpLine:6077Message:Payment method not found  
-[2025-11-02 21:22:17] live.EMERGENCY: File:/Applications/MAMP/htdocs/pointofsell/app/Utils/TransactionUtil.phpLine:6077Message:Payment method not found  
-[2025-11-02 21:22:35] live.EMERGENCY: File:/Applications/MAMP/htdocs/pointofsell/app/Utils/TransactionUtil.phpLine:6077Message:Payment method not found  
+[2025-11-02 22:55:16] live.EMERGENCY: File:/Applications/MAMP/htdocs/pointofsell/app/Utils/TransactionUtil.phpLine:1719Message:Undefined variable $qr_code_text  

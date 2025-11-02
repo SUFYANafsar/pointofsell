@@ -55,6 +55,137 @@
         </div>
         <div class="clearfix"></div>
         <div class="col-sm-12">
+            <h4>@lang('lang_v1.payment_method_account_mapping'):</h4>
+            <p class="help-block"><small>@lang('lang_v1.map_each_payment_method_to_an_account_help')</small></p>
+        </div>
+        <div class="clearfix"></div>
+        
+        {{-- Standard Payment Methods --}}
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_cash', __('lang_v1.cash') . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[cash]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['cash']) ? $payment_method_account_mapping['cash'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_cash']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_card', __('lang_v1.card') . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[card]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['card']) ? $payment_method_account_mapping['card'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_card']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_cheque', __('lang_v1.cheque') . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[cheque]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['cheque']) ? $payment_method_account_mapping['cheque'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_cheque']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_bank_transfer', __('lang_v1.bank_transfer') . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[bank_transfer]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['bank_transfer']) ? $payment_method_account_mapping['bank_transfer'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_bank_transfer']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_other', __('lang_v1.other') . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[other]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['other']) ? $payment_method_account_mapping['other'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_other']
+                ); !!}
+            </div>
+        </div>
+        
+        {{-- Custom Payment Methods --}}
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_1', (!empty($custom_labels['payments']['custom_pay_1']) ? $custom_labels['payments']['custom_pay_1'] : __('lang_v1.custom_payment', ['number' => 1])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_1]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_1']) ? $payment_method_account_mapping['custom_pay_1'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_1']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_2', (!empty($custom_labels['payments']['custom_pay_2']) ? $custom_labels['payments']['custom_pay_2'] : __('lang_v1.custom_payment', ['number' => 2])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_2]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_2']) ? $payment_method_account_mapping['custom_pay_2'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_2']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_3', (!empty($custom_labels['payments']['custom_pay_3']) ? $custom_labels['payments']['custom_pay_3'] : __('lang_v1.custom_payment', ['number' => 3])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_3]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_3']) ? $payment_method_account_mapping['custom_pay_3'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_3']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_4', (!empty($custom_labels['payments']['custom_pay_4']) ? $custom_labels['payments']['custom_pay_4'] : __('lang_v1.custom_payment', ['number' => 4])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_4]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_4']) ? $payment_method_account_mapping['custom_pay_4'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_4']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_5', (!empty($custom_labels['payments']['custom_pay_5']) ? $custom_labels['payments']['custom_pay_5'] : __('lang_v1.custom_payment', ['number' => 5])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_5]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_5']) ? $payment_method_account_mapping['custom_pay_5'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_5']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_6', (!empty($custom_labels['payments']['custom_pay_6']) ? $custom_labels['payments']['custom_pay_6'] : __('lang_v1.custom_payment', ['number' => 6])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_6]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_6']) ? $payment_method_account_mapping['custom_pay_6'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_6']
+                ); !!}
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <div class="form-group">
+                {!! Form::label('payment_method_custom_pay_7', (!empty($custom_labels['payments']['custom_pay_7']) ? $custom_labels['payments']['custom_pay_7'] : __('lang_v1.custom_payment', ['number' => 7])) . ' →'); !!}
+                {!! Form::select('payment_method_account_mapping[custom_pay_7]', 
+                    $accounts, 
+                    !empty($payment_method_account_mapping['custom_pay_7']) ? $payment_method_account_mapping['custom_pay_7'] : null,
+                    ['class' => 'form-control', 'id' => 'payment_method_custom_pay_7']
+                ); !!}
+            </div>
+        </div>
+        
+        <div class="clearfix"></div>
+        <div class="col-sm-12">
             <h4>@lang('lang_v1.labels_for_contact_custom_fields'):</h4>
         </div>
         <div class="col-sm-3">

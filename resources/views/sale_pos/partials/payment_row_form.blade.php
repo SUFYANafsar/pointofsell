@@ -120,7 +120,7 @@
             <div class="clearfix"></div>
         @endif
 	@if(!empty($accounts))
-		<div class="{{$col_class}}">
+		<div class="{{$col_class}} hide">
 			<div class="form-group @if($readonly) hide @endif">
 				{!! Form::label("account_$row_index" , __('lang_v1.payment_account') . ':') !!}
 				<div class="input-group">

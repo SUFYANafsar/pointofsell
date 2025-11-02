@@ -1589,5 +1589,6 @@ return [
     'previous_balance_due' => 'Previous balance due',
     'previous_balance_due_help' => 'Shows customer balance before this sale (excludes current sale due).',
     'show_previous_balance_due' => 'Show previous balance due',
+    'payment_method_not_linked_to_account' => 'Payment method :method is not linked to any account. Please map it in Business Settings.',
 
 ];

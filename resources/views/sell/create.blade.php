@@ -179,7 +179,7 @@
 		              	['whole_sell_price' => __('Whole Sell Price'), 
 		              		'regular_sell_price' => __('Regular Sell Price')],
 		              		null, 
-		              	['class' => 'form-control  pull-left','placeholder' => __('messages.please_select'), 'required' => true]); !!}
+		              	['class' => 'form-control  pull-left', 'id' => 'sell_price_type',  'required' => true]); !!}
 		            </div>
 		          </div>
 		        </div>

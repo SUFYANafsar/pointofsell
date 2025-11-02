@@ -1763,6 +1763,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
             is_serial_no = true;
         }
         
+        var sell_price_type = '';
+        if ($('#sell_price_type').length > 0) {
+            sell_price_type = $('#sell_price_type').val();
+        }
+
         $.ajax({
             method: 'GET',
             url: '/sells/pos/get_product_row/' + variation_id + '/' + location_id,
@@ -1778,7 +1783,8 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                 quantity: quantity,
                 is_sales_order: is_sales_order,
                 disable_qty_alert: disable_qty_alert,
-                is_draft: is_draft
+                is_draft: is_draft,
+                sell_price_type: sell_price_type
             },
             dataType: 'json',
             success: function(result) {

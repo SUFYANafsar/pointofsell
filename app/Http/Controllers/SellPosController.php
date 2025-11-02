@@ -1710,6 +1710,121 @@ class SellPosController extends Controller
             }
         }
 
+        //Handle sell_price_type logic
+        $sell_price_type = request()->input('sell_price_type');
+        $last_sell_line_for_whole_price = null;
+        if ($sell_price_type == 'whole_sell_price' && !empty($customer_id)) {
+            // Get customer's last sell line regardless of is_direct_sell
+            $last_sell_line_for_whole_price = $this->getLastSellLineForCustomer($variation_id, $customer_id, $location_id);
+            
+            $use_customer_price = false;
+            if (!empty($last_sell_line_for_whole_price) && !empty($last_sell_line_for_whole_price->transaction_date)) {
+                // Check if transaction date is within 3 months
+                $transaction_date = \Carbon\Carbon::parse($last_sell_line_for_whole_price->transaction_date);
+                $three_months_ago = \Carbon\Carbon::now()->subMonths(3);
+                
+                if ($transaction_date->gte($three_months_ago)) {
+                    // Use the price from last sell line (within 3 months)
+                    $use_customer_price = true;
+                    
+                    // Determine which price to use based on tax settings
+                    $hide_tax = request()->session()->get('business.enable_inline_tax') != 1;
+                    if ($hide_tax) {
+                        $product->default_sell_price = $last_sell_line_for_whole_price->unit_price;
+                        // Recalculate sell_price_inc_tax if needed
+                        if (!empty($last_sell_line_for_whole_price->tax_id)) {
+                            $tax_rate = TaxRate::find($last_sell_line_for_whole_price->tax_id);
+                            if (!empty($tax_rate)) {
+                                $tax_amount = ($last_sell_line_for_whole_price->unit_price * $tax_rate->amount) / 100;
+                                $product->sell_price_inc_tax = $last_sell_line_for_whole_price->unit_price + $tax_amount;
+                            } else {
+                                $product->sell_price_inc_tax = $last_sell_line_for_whole_price->unit_price;
+                            }
+                        } else {
+                            $product->sell_price_inc_tax = $last_sell_line_for_whole_price->unit_price;
+                        }
+                    } else {
+                        $product->sell_price_inc_tax = $last_sell_line_for_whole_price->unit_price_inc_tax;
+                        $product->default_sell_price = $last_sell_line_for_whole_price->unit_price;
+                    }
+                }
+            }
+            
+            // If no previous purchase or older than 3 months, use whole_sell_price (product_custom_field1)
+            if (!$use_customer_price && !empty($product->product_custom_field1)) {
+                $whole_sell_price = $this->transactionUtil->num_uf($product->product_custom_field1);
+                
+                // Determine which price to use based on tax settings
+                $hide_tax = request()->session()->get('business.enable_inline_tax') != 1;
+                if ($hide_tax) {
+                    $product->default_sell_price = $whole_sell_price;
+                    // Recalculate sell_price_inc_tax if needed
+                    if (!empty($product->tax_id)) {
+                        $tax_rate = TaxRate::find($product->tax_id);
+                        if (!empty($tax_rate)) {
+                            $tax_amount = ($whole_sell_price * $tax_rate->amount) / 100;
+                            $product->sell_price_inc_tax = $whole_sell_price + $tax_amount;
+                        } else {
+                            $product->sell_price_inc_tax = $whole_sell_price;
+                        }
+                    } else {
+                        $product->sell_price_inc_tax = $whole_sell_price;
+                    }
+                } else {
+                    // If tax is included, we need to calculate backwards or use whole_sell_price as inc_tax
+                    $product->sell_price_inc_tax = $whole_sell_price;
+                    // Calculate default_sell_price excluding tax
+                    if (!empty($product->tax_id)) {
+                        $tax_rate = TaxRate::find($product->tax_id);
+                        if (!empty($tax_rate)) {
+                            $product->default_sell_price = $whole_sell_price / (1 + ($tax_rate->amount / 100));
+                        } else {
+                            $product->default_sell_price = $whole_sell_price;
+                        }
+                    } else {
+                        $product->default_sell_price = $whole_sell_price;
+                    }
+                }
+            }
+        } elseif ($sell_price_type == 'whole_sell_price' && empty($customer_id)) {
+            // If whole_sell_price is selected but no customer selected, use whole_sell_price
+            if (!empty($product->product_custom_field1)) {
+                $whole_sell_price = $this->transactionUtil->num_uf($product->product_custom_field1);
+                
+                // Determine which price to use based on tax settings
+                $hide_tax = request()->session()->get('business.enable_inline_tax') != 1;
+                if ($hide_tax) {
+                    $product->default_sell_price = $whole_sell_price;
+                    // Recalculate sell_price_inc_tax if needed
+                    if (!empty($product->tax_id)) {
+                        $tax_rate = TaxRate::find($product->tax_id);
+                        if (!empty($tax_rate)) {
+                            $tax_amount = ($whole_sell_price * $tax_rate->amount) / 100;
+                            $product->sell_price_inc_tax = $whole_sell_price + $tax_amount;
+                        } else {
+                            $product->sell_price_inc_tax = $whole_sell_price;
+                        }
+                    } else {
+                        $product->sell_price_inc_tax = $whole_sell_price;
+                    }
+                } else {
+                    // If tax is included, we need to calculate backwards or use whole_sell_price as inc_tax
+                    $product->sell_price_inc_tax = $whole_sell_price;
+                    // Calculate default_sell_price excluding tax
+                    if (!empty($product->tax_id)) {
+                        $tax_rate = TaxRate::find($product->tax_id);
+                        if (!empty($tax_rate)) {
+                            $product->default_sell_price = $whole_sell_price / (1 + ($tax_rate->amount / 100));
+                        } else {
+                            $product->default_sell_price = $whole_sell_price;
+                        }
+                    } else {
+                        $product->default_sell_price = $whole_sell_price;
+                    }
+                }
+            }
+        }
+
         $warranties = $this->__getwarranties();
 
         $output['success'] = true;
@@ -1722,7 +1837,10 @@ class SellPosController extends Controller
         }
 
         $last_sell_line = null;
-        if ($is_direct_sell) {
+        // If whole_sell_price is selected, we already have the last_sell_line
+        if ($sell_price_type == 'whole_sell_price' && !empty($last_sell_line_for_whole_price)) {
+            $last_sell_line = $last_sell_line_for_whole_price;
+        } elseif ($is_direct_sell) {
             $last_sell_line = $this->getLastSellLineForCustomer($variation_id, $customer_id, $location_id);
         }
 
@@ -1763,7 +1881,8 @@ class SellPosController extends Controller
             ->where('t.status', 'final')
             ->where('transaction_sell_lines.variation_id', $variation_id)
             ->orderBy('t.transaction_date', 'desc')
-            ->select('transaction_sell_lines.*')
+            ->orderBy('t.id', 'desc')
+            ->select('transaction_sell_lines.*', 't.transaction_date as transaction_date')
             ->first();
 
         return $sell_line;

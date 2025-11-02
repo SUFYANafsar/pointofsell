@@ -46,6 +46,7 @@
 			              	<th>@lang('purchase.purchase_quantity')</th>
 			              	<th>@lang('lang_v1.quantity_left')</th>
 			              	<th>@lang('lang_v1.return_quantity')</th>
+			              	<th>@lang('lang_v1.bonus_qty')</th>
 			              	<th>@lang('lang_v1.return_subtotal')</th>
 			            </tr>
 			        </thead>
@@ -69,7 +70,11 @@
 			                	}
 			          		}
 
-			          		$qty_available = $purchase_line->quantity - $purchase_line->quantity_sold - $purchase_line->quantity_adjusted;
+			          		$qty_available = $purchase_line->quantity - $purchase_line->quantity_sold - $purchase_line->quantity_adjusted - $purchase_line->quantity_returned;
+			          		$bonus_qty = $purchase_line->bonus_quantity ?? 0;
+			          		$bonus_qty_returned = $purchase_line->bonus_quantity_returned ?? 0;
+			          		$bonus_qty_available = $bonus_qty - $bonus_qty_returned;
+			          		$formatted_bonus_qty_available = $purchase_line->formatted_bonus_qty_available ?? number_format($bonus_qty_available, 2, '.', '');
 			          	@endphp
 			            <tr>
 			              	<td>{{ $loop->iteration }}</td>
@@ -81,7 +86,12 @@
 			                 	@endif
 			              	</td>
 			              	<td><span class="display_currency" data-currency_symbol="true">{{ $purchase_line->purchase_price_inc_tax }}</span></td>
-			              	<td><span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $purchase_line->quantity }}</span> {{$unit_name}}</td>
+			              	<td>
+			              		<span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $purchase_line->quantity }}</span> {{$unit_name}}
+			              		@if($bonus_qty > 0)
+			              		<br><small class="text-info">@lang('lang_v1.bonus_qty'): <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $bonus_qty }}</span> {{$unit_name}} <span class="label label-info">FREE</span></small>
+			              		@endif
+			              	</td>
 			              	<td><span class="display_currency" data-currency_symbol="false" data-is_quantity="true">{{ $qty_available }}</span> {{$unit_name}}</td>
 			              	<td>
 			              		@php
@@ -100,6 +110,20 @@
 			              		@endif
 					            >
 					            <input type="hidden" class="unit_price" value="{{@num_format($purchase_line->purchase_price_inc_tax)}}">
+			              	</td>
+			              	<td>
+			              		@if($bonus_qty > 0)
+			              		<input type="text" name="bonus_returns[{{$purchase_line->id}}]" value="{{@format_quantity($bonus_qty_returned)}}"
+			              		class="form-control input-sm input_number return_bonus_qty input_quantity"
+			              		data-rule-abs_digit="{{$check_decimal}}" 
+			              		data-msg-abs_digit="@lang('lang_v1.decimal_value_not_allowed')"
+			              		data-rule-max-value="{{$bonus_qty}}"
+			              		data-msg-max-value="@lang('validation.custom-messages.quantity_not_available', ['qty' => $purchase_line->formatted_bonus_qty_total ?? @format_quantity($bonus_qty), 'unit' => $unit_name ])" 
+			              		placeholder="0">
+			              		<br><small class="text-muted">Available: <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{$bonus_qty_available}}</span> {{$unit_name}} (Total: <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{$bonus_qty}}</span> {{$unit_name}})</small>
+			              		@else
+			              		<span class="text-muted">-</span>
+			              		@endif
 			              	</td>
 			              	<td>
 			              		<div class="return_subtotal"></div>

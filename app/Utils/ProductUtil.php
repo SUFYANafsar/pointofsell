@@ -2014,7 +2014,7 @@ class ProductUtil extends Util
                     ->where('variations.id', $variation_id)
                     ->select(
                         DB::raw("SUM(IF(t.type='purchase' AND t.status='received', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_purchase"),
-                        DB::raw("SUM(IF(t.type='purchase' OR t.type='purchase_return', pl.quantity_returned, 0)) as total_purchase_return"),
+                        DB::raw("SUM(IF(t.type='purchase' OR t.type='purchase_return', pl.quantity_returned + IFNULL(pl.bonus_quantity_returned, 0), 0)) as total_purchase_return"),
                         DB::raw('SUM(pl.quantity_adjusted) as total_adjusted'),
                         DB::raw("SUM(IF(t.type='opening_stock', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_opening_stock"),
                         DB::raw("SUM(IF(t.type='purchase_transfer', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_purchase_transfer"),
@@ -2106,8 +2106,10 @@ class ProductUtil extends Util
                                     'pl.bonus_quantity as purchase_line_bonus_quantity',
                                     'rsl.quantity_returned as sell_return',
                                     'rpl.quantity_returned as purchase_return',
+                                    'rpl.bonus_quantity_returned as purchase_return_bonus',
                                     'al.quantity as stock_adjusted',
                                     'pl.quantity_returned as combined_purchase_return',
+                                    'pl.bonus_quantity_returned as combined_purchase_return_bonus',
                                     'transactions.return_parent_id',
                                     'transactions.transaction_date',
                                     'transactions.status',
@@ -2255,10 +2257,22 @@ class ProductUtil extends Util
                     'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
                 ]);
             } elseif ($stock_line->transaction_type == 'purchase_return') {
-                $quantity_change = -1 * ($stock_line->combined_purchase_return + $stock_line->purchase_return);
+                // For purchase_return: if has return_parent_id, use rpl (parent purchase lines)
+                // If no return_parent_id (combined return), use pl (purchase return transaction lines)
+                if (!empty($stock_line->return_parent_id)) {
+                    // Regular purchase return - bonus quantity is on parent purchase line
+                    $bonus_return = !empty($stock_line->purchase_return_bonus) ? $stock_line->purchase_return_bonus : 0;
+                    $quantity_change = -1 * ($stock_line->purchase_return + $bonus_return);
+                } else {
+                    // Combined purchase return - bonus quantity is on purchase return transaction line
+                    $combined_bonus_return = !empty($stock_line->combined_purchase_return_bonus) ? $stock_line->combined_purchase_return_bonus : 0;
+                    $quantity_change = -1 * ($stock_line->combined_purchase_return + $combined_bonus_return);
+                    $bonus_return = $combined_bonus_return;
+                }
                 $stock += $quantity_change;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_return,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'purchase_return',
                     'type_label' => __('lang_v1.purchase_return'),
@@ -2324,11 +2338,11 @@ class ProductUtil extends Util
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.status='received' AND transactions.type='purchase' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_purchased"),
-            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0)) FROM transactions 
+            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0) + COALESCE(PL.bonus_quantity_returned, 0)) FROM transactions 
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.status='received' AND transactions.type='purchase' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_purchase_return"),
-            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0)) FROM transactions 
+            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0) + COALESCE(PL.bonus_quantity_returned, 0)) FROM transactions 
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.type='purchase_return' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_combined_purchase_return"),

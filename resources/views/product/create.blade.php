@@ -146,7 +146,7 @@
         @endforeach
         @endif
         <div class="clearfix"></div>
-        <div class="col-sm-8 mb-5">
+        <div class="col-sm-8 mb-5 hide">
             <div class="form-group">
                 <div class="row">
                     <div class="col-sm-8 product-description-label">
@@ -172,7 +172,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-4 hide">
         <div class="form-group">
             {!! Form::label('product_brochure', __('lang_v1.product_brochure') . ':') !!}
             {!! Form::file('product_brochure', ['id' => 'product_brochure', 'accept' => implode(',', array_keys(config('constants.document_upload_mimes_types')))]); !!}
@@ -213,7 +213,7 @@
         </div>
         @endif
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 hide">
             <div class="form-group">
                 <br>
                 <label>
@@ -222,7 +222,7 @@
             </div>
         </div>
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 hide">
             <div class="form-group">
                 <br>
                 <label>
@@ -324,14 +324,14 @@
     @component('components.widget', ['class' => 'box-primary'])
     <div class="row">
 
-        <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
+        <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif hide">
             <div class="form-group">
                 {!! Form::label('tax', __('product.applicable_tax') . ':') !!}
                 {!! Form::select('tax', $taxes, !empty($duplicate_product->tax) ? $duplicate_product->tax : null, ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2'], $tax_attributes); !!}
             </div>
         </div>
 
-        <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
+        <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif hide">
             <div class="form-group">
                 {!! Form::label('tax_type', __('product.selling_price_tax_type') . ':*') !!}
                 {!! Form::select('tax_type', ['inclusive' => __('product.inclusive'), 'exclusive' => __('product.exclusive')], !empty($duplicate_product->tax_type) ? $duplicate_product->tax_type : 'exclusive',
@@ -341,7 +341,7 @@
 
         <div class="clearfix"></div>
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 hide">
             <div class="form-group">
                 {!! Form::label('type', __('product.product_type') . ':*') !!} @show_tooltip(__('tooltip.product_type'))
                 {!! Form::select('type', $product_types, !empty($duplicate_product->type) ? $duplicate_product->type : null, ['class' => 'form-control select2',

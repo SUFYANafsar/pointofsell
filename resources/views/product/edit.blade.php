@@ -150,7 +150,7 @@
                 @endforeach
             @endif
             <div class="clearfix"></div>
-            <div class="col-sm-8">
+            <div class="col-sm-8 hide">
               <div class="form-group">
                 {!! Form::label('product_description', __('lang_v1.product_description') . ':') !!}
                   {!! Form::textarea('product_description', $product->product_description, ['class' => 'form-control']); !!}
@@ -164,7 +164,7 @@
               </div>
             </div>
             </div>
-            <div class="col-sm-4">
+            <div class="col-sm-4 hide">
               <div class="form-group">
                 {!! Form::label('product_brochure', __('lang_v1.product_brochure') . ':') !!}
                 {!! Form::file('product_brochure', ['id' => 'product_brochure', 'accept' => implode(',', array_keys(config('constants.document_upload_mimes_types')))]); !!}
@@ -215,7 +215,7 @@
             </div>
           </div>
           @endif
-          <div class="col-sm-4">
+          <div class="col-sm-4 hide">
             <div class="checkbox">
               <label>
                 {!! Form::checkbox('enable_sr_no', 1, $product->enable_sr_no, ['class' => 'input-icheck']); !!} <strong>@lang('lang_v1.enable_imei_or_sr_no')</strong>
@@ -224,7 +224,7 @@
             </div>
           </div>
 
-          <div class="col-sm-4">
+          <div class="col-sm-4 hide">
           <div class="form-group">
             <br>
             <label>
@@ -316,7 +316,7 @@
             @endif
         @endforeach
 
-        <div class="col-sm-3">
+        <div class="col-sm-3 hide">
           <div class="form-group">
             {!! Form::label('preparation_time_in_minutes',  __('lang_v1.preparation_time_in_minutes') . ':') !!}
             {!! Form::number('preparation_time_in_minutes', $product->preparation_time_in_minutes, ['class' => 'form-control', 'placeholder' => __('lang_v1.preparation_time_in_minutes')]); !!}
@@ -329,14 +329,14 @@
 
     @component('components.widget', ['class' => 'box-primary'])
         <div class="row">
-            <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
+            <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif hide">
               <div class="form-group">
                 {!! Form::label('tax', __('product.applicable_tax') . ':') !!}
                   {!! Form::select('tax', $taxes, $product->tax, ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2'], $tax_attributes); !!}
               </div>
             </div>
 
-            <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
+            <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif hide">
               <div class="form-group">
                 {!! Form::label('tax_type', __('product.selling_price_tax_type') . ':*') !!}
                   {!! Form::select('tax_type',['inclusive' => __('product.inclusive'), 'exclusive' => __('product.exclusive')], $product->tax_type,
@@ -345,7 +345,7 @@
             </div>
 
             <div class="clearfix"></div>
-            <div class="col-sm-4">
+            <div class="col-sm-4 hide">
               <div class="form-group">
                 {!! Form::label('type', __('product.product_type') . ':*') !!} @show_tooltip(__('tooltip.product_type'))
                 {!! Form::select('type', $product_types, $product->type, ['class' => 'form-control select2',

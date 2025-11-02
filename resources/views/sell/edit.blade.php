@@ -468,7 +468,7 @@
 				    </div>
 			    </div>
 			    <div class="clearfix"></div>
-			    <div class="col-md-4 @if($transaction->type == 'sales_order') hide @endif">
+			    <div class="col-md-4 @if($transaction->type == 'sales_order') hide @endif hide">
 			    	<div class="form-group">
 			            {!! Form::label('tax_rate_id', __('sale.order_tax') . ':*' ) !!}
 			            <div class="input-group">
@@ -482,7 +482,7 @@
 			            </div>
 			        </div>
 			    </div>
-			    <div class="col-md-4 col-md-offset-4 @if($transaction->type == 'sales_order') hide @endif">
+			    <div class="col-md-4 col-md-offset-4 @if($transaction->type == 'sales_order') hide @endif hide">
 			    	<b>@lang( 'sale.order_tax' ):</b>(+) 
 					<span class="display_currency" id="order_tax">{{$transaction->tax_amount}}</span>
 			    </div>
@@ -496,7 +496,7 @@
 				<input type="hidden" name="is_serial_no" value="1">
 			@endcomponent
 
-			@component('components.widget', ['class' => 'box-solid'])
+			@component('components.widget', ['class' => 'box-solid hide'])
 			<div class="col-md-4">
 				<div class="form-group">
 		            {!! Form::label('shipping_details', __('sale.shipping_details')) !!}

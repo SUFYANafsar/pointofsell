@@ -746,6 +746,33 @@ class TransactionUtil extends Util
                         $paid_on = \Carbon::now()->toDateTimeString();
                     }
 
+                    // Get payment method account mapping for auto-linking
+                    $account_id = null;
+                    if (!empty($payment['method']) && $payment['method'] != 'advance') {
+                        // First check if account_id is explicitly provided
+                        if (!empty($payment['account_id'])) {
+                            $account_id = $payment['account_id'];
+                        } else {
+                            // Auto-link based on payment method mapping
+                            $business = Business::find($transaction->business_id);
+                            if ($business && !empty($business->payment_method_account_mapping)) {
+                                $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                                    ? $business->payment_method_account_mapping 
+                                    : json_decode($business->payment_method_account_mapping, true);
+                                
+                                if (!empty($payment_method_account_mapping[$payment['method']])) {
+                                    $account_id = $payment_method_account_mapping[$payment['method']];
+                                } else {
+                                    // Payment method not mapped to any account - throw error
+                                    throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $payment['method']]));
+                                }
+                            } else {
+                                // No mapping configured - throw error
+                                throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $payment['method']]));
+                            }
+                        }
+                    }
+
                     $payment_data = [
                         'amount' => $payment_amount,
                         'method' => $payment['method'],
@@ -764,7 +791,7 @@ class TransactionUtil extends Util
                         'created_by' => empty($user_id) ? auth()->user()->id : $user_id,
                         'payment_for' => $transaction->contact_id,
                         'payment_ref_no' => $payment_ref_no,
-                        'account_id' => ! empty($payment['account_id']) && $payment['method'] != 'advance' ? $payment['account_id'] : null,
+                        'account_id' => $account_id,
                     ];
 
                     for ($i = 1; $i < 8; $i++) {
@@ -860,6 +887,20 @@ class TransactionUtil extends Util
                             ->first();
 
         $transaction_type = ! empty($transaction->type) ? $transaction->type : null;
+
+        // Auto-link account if not provided and payment method is not advance
+        if (empty($payment['account_id']) && !empty($payment['method']) && $payment['method'] != 'advance' && !empty($transaction)) {
+            $business = Business::find($transaction->business_id);
+            if ($business && !empty($business->payment_method_account_mapping)) {
+                $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                    ? $business->payment_method_account_mapping 
+                    : json_decode($business->payment_method_account_mapping, true);
+                
+                if (!empty($payment_method_account_mapping[$payment['method']])) {
+                    $payment['account_id'] = $payment_method_account_mapping[$payment['method']];
+                }
+            }
+        }
 
         $tp->update($payment);
 
@@ -6030,7 +6071,8 @@ class TransactionUtil extends Util
         //payment type option is available on pay contact modal
         $is_reverse = $request->has('is_reverse') && $request->input('is_reverse') == 1 ? true : false;
 
-        $payment_types = $this->payment_types();
+        // Pass business_id to get payment types with mapping
+        $payment_types = $this->payment_types(null, false, $business_id);
 
         if (! array_key_exists($inputs['method'], $payment_types)) {
             throw new \Exception('Payment method not found');
@@ -6075,8 +6117,30 @@ class TransactionUtil extends Util
 
         $inputs['payment_ref_no'] = $payment_ref_no;
 
-        if (! empty($request->input('account_id'))) {
-            $inputs['account_id'] = $request->input('account_id');
+        // Auto-link account based on payment method mapping
+        if (!empty($inputs['method']) && $inputs['method'] != 'advance') {
+            // First check if account_id is explicitly provided
+            if (!empty($request->input('account_id'))) {
+                $inputs['account_id'] = $request->input('account_id');
+            } else {
+                // Auto-link based on payment method mapping
+                $business = Business::find($business_id);
+                if ($business && !empty($business->payment_method_account_mapping)) {
+                    $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                        ? $business->payment_method_account_mapping 
+                        : json_decode($business->payment_method_account_mapping, true);
+                    
+                    if (!empty($payment_method_account_mapping[$inputs['method']])) {
+                        $inputs['account_id'] = $payment_method_account_mapping[$inputs['method']];
+                    } else {
+                        // Payment method not mapped to any account - throw error
+                        throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $inputs['method']]));
+                    }
+                } else {
+                    // No mapping configured - throw error
+                    throw new \Exception(__('lang_v1.payment_method_not_linked_to_account', ['method' => $inputs['method']]));
+                }
+            }
         }
 
         //get payment type (creditor debit)

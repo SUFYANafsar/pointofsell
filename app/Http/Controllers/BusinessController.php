@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Account;
 use App\Business;
 use App\Currency;
 use App\Notifications\TestEmailNotification;
@@ -347,7 +348,17 @@ class BusinessController extends Controller
 
         $payment_types = $this->moduleUtil->payment_types(null, false, $business_id);
 
-        return view('business.settings', compact('business', 'currencies', 'tax_rates', 'timezone_list', 'months', 'accounting_methods', 'commission_agent_dropdown', 'units_dropdown', 'date_formats', 'shortcuts', 'pos_settings', 'modules', 'theme_colors', 'email_settings', 'sms_settings', 'mail_drivers', 'allow_superadmin_email_settings', 'custom_labels', 'common_settings', 'weighing_scale_setting', 'payment_types'));
+        // Load accounts dropdown for payment method mapping
+        $accounts = [];
+        if ($this->moduleUtil->isModuleEnabled('account')) {
+            $accounts = Account::forDropdown($business_id, true);
+        }
+
+        // Load existing payment method account mapping
+        $payment_method_account_mapping = !empty($business->payment_method_account_mapping) ? 
+            (is_array($business->payment_method_account_mapping) ? $business->payment_method_account_mapping : json_decode($business->payment_method_account_mapping, true)) : [];
+
+        return view('business.settings', compact('business', 'currencies', 'tax_rates', 'timezone_list', 'months', 'accounting_methods', 'commission_agent_dropdown', 'units_dropdown', 'date_formats', 'shortcuts', 'pos_settings', 'modules', 'theme_colors', 'email_settings', 'sms_settings', 'mail_drivers', 'allow_superadmin_email_settings', 'custom_labels', 'common_settings', 'weighing_scale_setting', 'payment_types', 'accounts', 'payment_method_account_mapping'));
     }
 
     /**
@@ -474,6 +485,19 @@ class BusinessController extends Controller
             $business_details['pos_settings'] = json_encode($pos_settings);
 
             $business_details['custom_labels'] = json_encode($business_details['custom_labels']);
+
+            // Save payment method account mapping
+            $payment_method_account_mapping = $request->input('payment_method_account_mapping', []);
+            // Filter out empty values (empty strings and null) but preserve array structure
+            if (!empty($payment_method_account_mapping) && is_array($payment_method_account_mapping)) {
+                $payment_method_account_mapping = array_filter($payment_method_account_mapping, function($value) {
+                    return $value !== '' && $value !== null;
+                });
+            }
+            // Pass array directly - Laravel will auto-json_encode because of the 'array' cast in Business model
+            $business_details['payment_method_account_mapping'] = !empty($payment_method_account_mapping) && is_array($payment_method_account_mapping) && count($payment_method_account_mapping) > 0 
+                ? $payment_method_account_mapping 
+                : null;
 
             $business_details['common_settings'] = ! empty($request->input('common_settings')) ? $request->input('common_settings') : [];
 

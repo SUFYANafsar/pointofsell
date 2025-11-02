@@ -1636,6 +1636,19 @@ class ProductUtil extends Util
             );
         }
 
+        // Join product_racks to get rack, row, position details
+        if (! empty($location_id)) {
+            $query->leftjoin('product_racks AS PR', function ($join) use ($location_id, $business_id) {
+                $join->on('products.id', '=', 'PR.product_id')
+                    ->where('PR.location_id', '=', $location_id)
+                    ->where('PR.business_id', '=', $business_id);
+            })
+            ->leftjoin('business_locations AS BL', function ($join) use ($location_id) {
+                $join->on('BL.id', '=', 'PR.location_id')
+                    ->where('BL.id', '=', $location_id);
+            });
+        }
+
         $query->where('products.business_id', $business_id)
                 ->where('products.type', '!=', 'modifier');
 
@@ -1715,7 +1728,7 @@ class ProductUtil extends Util
             $query->ForLocation($location_id);
         }
 
-        $query->select(
+        $select_fields = [
                 'products.id as product_id',
                 'products.name',
                 'products.type',
@@ -1725,8 +1738,22 @@ class ProductUtil extends Util
                 'VLD.qty_available',
                 'variations.sell_price_inc_tax as selling_price',
                 'variations.sub_sku',
-                'U.short_name as unit'
-            );
+                'U.short_name as unit',
+                'products.product_custom_field1 as whole_sell_price'
+            ];
+
+        // Add rack details if location_id is provided
+        if (! empty($location_id)) {
+            $select_fields = array_merge($select_fields, [
+                'PR.rack',
+                'PR.row',
+                'PR.position',
+                'BL.name as location_name',
+                'BL.id as rack_location_id'
+            ]);
+        }
+
+        $query->select($select_fields);
 
         if (! empty($price_group_id)) {
             $query->addSelect(DB::raw('IF (VGP.price_type = "fixed", VGP.price_inc_tax, VGP.price_inc_tax * variations.sell_price_inc_tax / 100) as variation_group_price'));
@@ -1740,11 +1767,23 @@ class ProductUtil extends Util
              ->orderBy('VLD.qty_available', 'desc')
              ->get();
 
-        // 🔐 Escape `name`, `variation`, `sub_sku`
+        // 🔐 Escape `name`, `variation`, `sub_sku`, rack details
         $data->transform(function ($item) {
             $item->name = e($item->name);
             $item->variation = e($item->variation);
             $item->sub_sku = e($item->sub_sku);
+            if (!empty($item->rack)) {
+                $item->rack = e($item->rack);
+            }
+            if (!empty($item->row)) {
+                $item->row = e($item->row);
+            }
+            if (!empty($item->position)) {
+                $item->position = e($item->position);
+            }
+            if (!empty($item->location_name)) {
+                $item->location_name = e($item->location_name);
+            }
             return $item;
         });
 

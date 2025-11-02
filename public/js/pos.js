@@ -186,26 +186,7 @@ $(document).ready(function() {
                 },
                 minLength: 2,
                 response: function(event, ui) {
-                    if (ui.content.length == 1) {
-                        ui.item = ui.content[0];
-
-                        var is_overselling_allowed = false;
-                        if($('input#is_overselling_allowed').length) {
-                            is_overselling_allowed = true;
-                        }
-                        var for_so = false;
-                        if ($('#sale_type').length && $('#sale_type').val() == 'sales_order') {
-                            for_so = true;
-                        }
-
-                        if ((ui.item.enable_stock == 1 && ui.item.qty_available > 0) || 
-                                (ui.item.enable_stock == 0) || is_overselling_allowed || for_so) {
-                            $(this)
-                                .data('ui-autocomplete')
-                                ._trigger('select', 'autocompleteselect', ui);
-                            $(this).autocomplete('close');
-                        }
-                    } else if (ui.content.length == 0) {
+                    if (ui.content.length == 0) {
                         toastr.error(LANG.no_products_found);
                         if (!$('#__is_mobile').length) {
                             $('input#search_product').select();
@@ -275,9 +256,26 @@ $(document).ready(function() {
                     ' (' +
                     item.sub_sku +
                     ')' +
-                    '<br> Price: ' +
+                    '<br> Price: <span style="color: #d9534f; font-weight: 600;">' +
                     __currency_trans_from_en(selling_price, false, false, __currency_precision, true) +
-                    ' (Out of stock) </li>';
+                    '</span>';
+                // Add whole sell price if available
+                if (item.whole_sell_price) {
+                    var whole_price = parseFloat(item.whole_sell_price);
+                    if (!isNaN(whole_price) && whole_price > 0) {
+                        string += ' | Whole Sell: <span style="color: #5cb85c; font-weight: 600;">' + __currency_trans_from_en(whole_price, false, false, __currency_precision, true) + '</span>';
+                    }
+                }
+                // Add rack details if available
+                if (item.location_name && (item.rack || item.row || item.position)) {
+                    string += '<br><small>';
+                    if (item.rack) string += 'Rack: ' + item.rack;
+                    if (item.row) string += (item.rack ? ' | ' : '') + 'Row: ' + item.row;
+                    if (item.position) string += ((item.rack || item.row) ? ' | ' : '') + 'Position: ' + item.position;
+                    string += ' (' + item.location_name + ')';
+                    string += '</small>';
+                }
+                string += ' (Out of stock) </li>';
                 return $(string).appendTo(ul);
             } else {
                 var string = '<div>' + item.name;
@@ -290,10 +288,26 @@ $(document).ready(function() {
                     selling_price = item.variation_group_price;
                 }
 
-                string += ' (' + item.sub_sku + ')' + '<br> Price: ' + __currency_trans_from_en(selling_price, false, false, __currency_precision, true);
+                string += ' (' + item.sub_sku + ')' + '<br> Price: <span style="color: #d9534f; font-weight: 600;">' + __currency_trans_from_en(selling_price, false, false, __currency_precision, true) + '</span>';
+                // Add whole sell price if available
+                if (item.whole_sell_price) {
+                    var whole_price = parseFloat(item.whole_sell_price);
+                    if (!isNaN(whole_price) && whole_price > 0) {
+                        string += ' | Whole: <span style="color: #5cb85c; font-weight: 600;">' + __currency_trans_from_en(whole_price, false, false, __currency_precision, true) + '</span>';
+                    }
+                }
                 if (item.enable_stock == 1) {
                     var qty_available = __currency_trans_from_en(item.qty_available, false, false, __currency_precision, true);
                     string += ' - ' + qty_available + item.unit;
+                }
+                // Add rack details if available
+                if (item.location_name && (item.rack || item.row || item.position)) {
+                    string += '<br><small>';
+                    if (item.rack) string += 'Rack: ' + item.rack;
+                    if (item.row) string += (item.rack ? ' | ' : '') + 'Row: ' + item.row;
+                    if (item.position) string += ((item.rack || item.row) ? ' | ' : '') + 'Position: ' + item.position;
+                    string += ' (' + item.location_name + ')';
+                    string += '</small>';
                 }
                 string += '</div>';
 

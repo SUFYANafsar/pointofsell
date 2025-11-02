@@ -319,6 +319,25 @@ $(document).ready(function() {
     }
 
     //Update line total and check for quantity not greater than max quantity
+    // Handle Enter key on quantity field to move to price field
+    $('table#pos_table tbody').on('keydown', 'input.pos_quantity', function(e) {
+        if (e.keyCode === 13 || e.which === 13) { // Enter key
+            e.preventDefault();
+            var tr = $(this).parents('tr');
+            // Try pos_unit_price first, then pos_unit_price_inc_tax
+            var price_field = tr.find('input.pos_unit_price');
+            if (!price_field.length || price_field.is(':hidden') || price_field.prop('readonly')) {
+                price_field = tr.find('input.pos_unit_price_inc_tax');
+            }
+            if (price_field.length && !price_field.prop('readonly')) {
+                price_field.focus().select();
+            } else {
+                // If no editable price field, go back to search product
+                $('input#search_product').focus().select();
+            }
+        }
+    });
+
     $('table#pos_table tbody').on('change', 'input.pos_quantity', function() {
         // comment line becouse it validate form at increment and decrement item
         // if (sell_form_validator) {
@@ -349,6 +368,16 @@ $(document).ready(function() {
         pos_total_row();
 
         adjustComboQty(tr);
+    });
+
+    // Handle Enter key on price field to move back to search product
+    $('table#pos_table tbody').on('keydown', 'input.pos_unit_price, input.pos_unit_price_inc_tax', function(e) {
+        if (e.keyCode === 13 || e.which === 13) { // Enter key
+            e.preventDefault();
+            if (!$('#__is_mobile').length) {
+                $('input#search_product').focus().select();
+            }
+        }
     });
 
     //If change in unit price update price including tax and line total
@@ -1835,9 +1864,14 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     __currency_convert_recursively(this_row);
 
                     if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
+                        // Focus on quantity field instead of search product
+                        var quantity_field = this_row.find('input.pos_quantity');
+                        if (quantity_field.length) {
+                            quantity_field.focus().select();
+                        } else {
+                            // Fallback to search product if quantity field not found
+                            $('input#search_product').focus().select();
+                        }
                     }
 
                     //Used in restaurant module

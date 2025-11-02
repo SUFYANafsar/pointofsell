@@ -434,6 +434,11 @@
                             <br><small>
                             	{{$line['quantity']}} x {{$line['base_unit_multiplier']}} = {{$line['orig_quantity']}} {{$line['base_unit_name']}}
                             </small>
+                            @endif
+                            @if(!empty($line['bonus_quantity']) && $line['bonus_quantity'] > 0)
+                            <br><small class="text-info">
+                            	@lang('lang_v1.bonus_qty'): {{$line['bonus_quantity']}} {{$line['units']}} <span class="label label-info">FREE</span>
+                            </small>
                             @endif</td>
 	                        @if(empty($receipt_details->hide_price))
 	                        <td class="unit_price text-right">{{$line['unit_price_before_discount']}}</td>

@@ -167,6 +167,11 @@
                         </td>
 						<td class="text-right">
 							{{$line['quantity']}} {{$line['units']}}
+							@if(!empty($line['bonus_quantity']) && $line['bonus_quantity'] > 0)
+							<br><small class="text-info">
+								@lang('lang_v1.bonus_qty'): {{$line['bonus_quantity']}} {{$line['units']}} <span class="label label-info">FREE</span>
+							</small>
+							@endif
 						</td>
 					</tr>
 					@if(!empty($line['modifiers']))

@@ -370,6 +370,17 @@ $(document).ready(function() {
         adjustComboQty(tr);
     });
 
+    // Handle bonus quantity changes - does not affect line totals or pricing
+    $('table#pos_table tbody').on('change', 'input.pos_bonus_quantity', function() {
+        // Bonus quantity is for display and stock purposes only
+        // It does not affect line totals or pricing calculations
+        // Just ensure the value is properly formatted
+        var bonus_qty = __read_number($(this));
+        if (bonus_qty < 0) {
+            __write_number($(this), 0);
+        }
+    });
+
     // Handle Enter key on price field to move back to search product
     $('table#pos_table tbody').on('keydown', 'input.pos_unit_price, input.pos_unit_price_inc_tax', function(e) {
         if (e.keyCode === 13 || e.which === 13) { // Enter key

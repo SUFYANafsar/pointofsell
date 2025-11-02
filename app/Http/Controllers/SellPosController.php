@@ -544,6 +544,16 @@ class SellPosController extends Controller
                             $decrease_qty = $decrease_qty * $product['base_unit_multiplier'];
                         }
 
+                        // Include bonus quantity in stock decrease
+                        $bonus_qty = 0;
+                        if (!empty($product['bonus_quantity'])) {
+                            $bonus_qty = $this->productUtil->num_uf($product['bonus_quantity']);
+                            if (!empty($product['base_unit_multiplier'])) {
+                                $bonus_qty = $bonus_qty * $product['base_unit_multiplier'];
+                            }
+                            $decrease_qty += $bonus_qty;
+                        }
+
                         if ($product['enable_stock']) {
                             $this->productUtil->decreaseProductQuantity(
                                 $product['product_id'],
@@ -920,6 +930,7 @@ class SellPosController extends Controller
                 'transaction_sell_lines.id as transaction_sell_lines_id',
                 'transaction_sell_lines.id',
                 'transaction_sell_lines.quantity as quantity_ordered',
+                'transaction_sell_lines.bonus_quantity',
                 'transaction_sell_lines.sell_line_note as sell_line_note',
                 'transaction_sell_lines.parent_sell_line_id',
                 'transaction_sell_lines.lot_no_line_id',
@@ -2925,6 +2936,11 @@ class SellPosController extends Controller
             //update product stock
             foreach ($transaction->sell_lines as $sell_line) {
                 $decrease_qty = $sell_line->quantity;
+                
+                // Include bonus quantity in stock decrease
+                if (!empty($sell_line->bonus_quantity)) {
+                    $decrease_qty += $sell_line->bonus_quantity;
+                }
 
                 if ($sell_line->product->enable_stock == 1) {
                     $this->productUtil->decreaseProductQuantity(

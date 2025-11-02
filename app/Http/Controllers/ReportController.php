@@ -683,6 +683,10 @@ class ReportController extends Controller
 
                         WHERE transactions.status='final' AND transactions.type='sell' $location_filter 
                         AND (TSL.variation_id=v.id OR TPL.variation_id=v.id)) as total_sold"),
+                DB::raw("(SELECT SUM(COALESCE(TSL.bonus_quantity, 0)) FROM transactions 
+                        LEFT JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
+                        WHERE transactions.status='final' AND transactions.type='sell' $location_filter 
+                        AND TSL.variation_id=v.id) as total_bonus_given"),
                 DB::raw("(SELECT SUM(IF(transactions.type='sell_transfer', TSL.quantity, 0) ) FROM transactions 
                         LEFT JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                         WHERE transactions.status='final' AND transactions.type='sell_transfer' $location_filter 
@@ -1890,6 +1894,7 @@ class ReportController extends Controller
                     'transaction_sell_lines.unit_price_before_discount as unit_price',
                     'transaction_sell_lines.unit_price_inc_tax as unit_sale_price',
                     DB::raw('(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as sell_qty'),
+                    DB::raw('COALESCE(transaction_sell_lines.bonus_quantity, 0) as bonus_qty'),
                     'transaction_sell_lines.line_discount_type as discount_type',
                     'transaction_sell_lines.line_discount_amount as discount_amount',
                     'transaction_sell_lines.item_tax',
@@ -1967,6 +1972,11 @@ class ReportController extends Controller
                     data-unit="'.$row->unit.'" >'.
                     $this->transactionUtil->num_f($row->sell_qty, false, null, true).'</span> '.$row->unit;
                 })
+                ->addColumn('bonus_qty', function ($row) {
+                    $bonus_qty = isset($row->bonus_qty) && $row->bonus_qty !== null ? (float) $row->bonus_qty : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                  ->editColumn('subtotal', function ($row) {
                      //ignore child sell line of combo product
                      $class = is_null($row->parent_sell_line_id) ? 'row_subtotal' : '';
@@ -2005,7 +2015,7 @@ class ReportController extends Controller
                     return $html;
                 })
                 ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
-                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount', 'unit_price', 'tax', 'customer', 'payment_methods'])
+                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'bonus_qty', 'discount_amount', 'unit_price', 'tax', 'customer', 'payment_methods'])
                 ->make(true);
         }
 
@@ -2724,6 +2734,7 @@ class ReportController extends Controller
                     DB::raw('DATE_FORMAT(t.transaction_date, "%Y-%m-%d") as formated_date'),
                     DB::raw("(SELECT SUM(vld.qty_available) FROM variation_location_details as vld WHERE vld.variation_id=v.id $vld_str) as current_stock"),
                     DB::raw('SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as total_qty_sold'),
+                    DB::raw('SUM(COALESCE(transaction_sell_lines.bonus_quantity, 0)) as total_bonus_given'),
                     'u.short_name as unit',
                     DB::raw('SUM((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal')
                 )
@@ -2784,6 +2795,11 @@ class ReportController extends Controller
                 ->editColumn('total_qty_sold', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency sell_qty" data-currency_symbol=false data-orig-value="'.(float) $row->total_qty_sold.'" data-unit="'.$row->unit.'" >'.(float) $row->total_qty_sold.'</span> '.$row->unit;
                 })
+                ->addColumn('total_bonus_given', function ($row) {
+                    $bonus_qty = isset($row->total_bonus_given) && $row->total_bonus_given !== null ? (float) $row->total_bonus_given : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                 ->editColumn('current_stock', function ($row) {
                     if ($row->enable_stock) {
                         return '<span data-is_quantity="true" class="display_currency current_stock" data-currency_symbol=false data-orig-value="'.(float) $row->current_stock.'" data-unit="'.$row->unit.'" >'.(float) $row->current_stock.'</span> '.$row->unit;
@@ -2798,7 +2814,7 @@ class ReportController extends Controller
                      $this->transactionUtil->num_f($row->subtotal, true).'</span>';
                  })
 
-                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold'])
+                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'total_bonus_given'])
                 ->make(true);
         }
     }
@@ -2846,6 +2862,7 @@ class ReportController extends Controller
                     'cat.name as category_name',
                     DB::raw("(SELECT SUM(vld.qty_available) FROM variation_location_details as vld WHERE vld.variation_id=transaction_sell_lines.variation_id $vld_str) as current_stock"),
                     DB::raw('SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as total_qty_sold'),
+                    DB::raw('SUM(COALESCE(transaction_sell_lines.bonus_quantity, 0)) as total_bonus_given'),
                     DB::raw('SUM((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal'),
                     'transaction_sell_lines.parent_sell_line_id'
                 );
@@ -2900,6 +2917,11 @@ class ReportController extends Controller
                 ->editColumn('total_qty_sold', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency sell_qty" data-currency_symbol=false data-orig-value="'.(float) $row->total_qty_sold.'" data-unit="" >'.(float) $row->total_qty_sold.'</span> '.$row->unit;
                 })
+                ->addColumn('total_bonus_given', function ($row) {
+                    $bonus_qty = isset($row->total_bonus_given) && $row->total_bonus_given !== null ? (float) $row->total_bonus_given : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                 ->editColumn('current_stock', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency current_stock" data-currency_symbol=false data-orig-value="'.(float) $row->current_stock.'" data-unit="">'.(float) $row->current_stock.'</span> ';
                 })
@@ -2910,7 +2932,7 @@ class ReportController extends Controller
                     .$this->transactionUtil->num_f($row->subtotal, true).'</span>';
                  })
 
-                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'category_name'])
+                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'total_bonus_given', 'category_name'])
                 ->make(true);
         }
     }

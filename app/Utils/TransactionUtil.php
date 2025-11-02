@@ -366,10 +366,18 @@ class TransactionUtil extends Util
                     }
                 }
 
+                // Get bonus quantity
+                $bonus_quantity = 0;
+                if (!empty($product['bonus_quantity'])) {
+                    $bonus_quantity = $uf_data ? $this->num_uf($product['bonus_quantity']) : $product['bonus_quantity'];
+                    $bonus_quantity = $bonus_quantity * $multiplier;
+                }
+
                 $line = [
                     'product_id' => $product['product_id'],
                     'variation_id' => $product['variation_id'],
                     'quantity' => $uf_quantity * $multiplier,
+                    'bonus_quantity' => $bonus_quantity,
                     'unit_price_before_discount' => $unit_price_before_discount,
                     'unit_price' => $unit_price,
                     'line_discount_type' => ! empty($product['line_discount_type']) ? $product['line_discount_type'] : null,
@@ -588,10 +596,18 @@ class TransactionUtil extends Util
             }
         }
 
+        // Get bonus quantity for edit
+        $bonus_quantity = 0;
+        if (!empty($product['bonus_quantity'])) {
+            $bonus_quantity = $uf_data ? $this->num_uf($product['bonus_quantity']) : $product['bonus_quantity'];
+            $bonus_quantity = $bonus_quantity * $multiplier;
+        }
+
         //Update sell lines.
         $sell_line->fill(['product_id' => $product['product_id'],
             'variation_id' => $product['variation_id'],
             'quantity' => $uf_data ? $this->num_uf($product['quantity']) * $multiplier : $product['quantity'] * $multiplier,
+            'bonus_quantity' => $bonus_quantity,
             'unit_price_before_discount' => $unit_price_before_discount,
             'unit_price' => $unit_price,
             'line_discount_type' => ! empty($product['line_discount_type']) ? $product['line_discount_type'] : null,
@@ -2086,6 +2102,8 @@ class TransactionUtil extends Util
                 //Field for 2nd column
                 'quantity' => $this->num_f($line->quantity, false, $business_details, true),
                 'quantity_uf' => $line->quantity,
+                'bonus_quantity' => $this->num_f($line->bonus_quantity ?? 0, false, $business_details, true),
+                'bonus_quantity_uf' => $line->bonus_quantity ?? 0,
                 'units' => $unit_name,
 
                 'base_unit_name' => $base_unit_name,

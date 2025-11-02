@@ -1073,6 +1073,7 @@ class SellController extends Controller
                             'transaction_sell_lines.id as transaction_sell_lines_id',
                             'transaction_sell_lines.id',
                             'transaction_sell_lines.quantity as quantity_ordered',
+                            'transaction_sell_lines.bonus_quantity',
                             'transaction_sell_lines.sell_line_note as sell_line_note',
                             'transaction_sell_lines.parent_sell_line_id',
                             'transaction_sell_lines.lot_no_line_id',

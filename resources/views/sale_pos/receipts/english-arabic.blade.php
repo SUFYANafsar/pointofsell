@@ -169,7 +169,12 @@
                             <br><small>{!!$line['sell_line_note']!!}</small>
                         @endif
                     </td>
-                    <td class="print-red" style="text-align: center;">{{$line['quantity']}} {{$line['units']}}</td>
+                    <td class="print-red" style="text-align: center;">
+                    	{{$line['quantity']}} {{$line['units']}}
+                    	@if(!empty($line['bonus_quantity']) && $line['bonus_quantity'] > 0)
+                    	<br><small class="text-info">@lang('lang_v1.bonus_qty'): {{$line['bonus_quantity']}} {{$line['units']}} <span class="label label-info">FREE</span></small>
+                    	@endif
+                    </td>
                     <td class="print-red" style=" text-align: center;">{{$line['unit_price_before_discount']}}</td>
                     <td class="print-red" style=" text-align: center;">{{$line['line_total_exc_tax']}}</td>
                     <td class="print-red" style=" text-align: center;">

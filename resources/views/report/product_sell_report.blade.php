@@ -124,6 +124,7 @@
                                         <th>@lang('sale.invoice_no')</th>
                                         <th>@lang('messages.date')</th>
                                         <th>@lang('sale.qty')</th>
+                                        <th>@lang('lang_v1.bonus_qty')</th>
                                         <th>@lang('sale.unit_price')</th>
                                         <th>@lang('sale.discount')</th>
                                         <th>@lang('sale.tax')</th>
@@ -136,6 +137,7 @@
                                     <tr class="bg-gray font-17 footer-total text-center">
                                         <td colspan="9"><strong>@lang('sale.total'):</strong></td>
                                         <td id="footer_total_sold"></td>
+                                        <td id="footer_total_bonus"></td>
                                         <td></td>
                                         <td></td>
                                         <td id="footer_tax"></td>
@@ -183,6 +185,7 @@
                                         <th>@lang('messages.date')</th>
                                         <th>@lang('report.current_stock')</th>
                                         <th>@lang('report.total_unit_sold')</th>
+                                        <th>@lang('lang_v1.bonus_qty')</th>
                                         <th>@lang('sale.total')</th>
                                     </tr>
                                 </thead>
@@ -190,6 +193,7 @@
                                     <tr class="bg-gray font-17 footer-total text-center">
                                         <td colspan="4"><strong>@lang('sale.total'):</strong></td>
                                         <td id="footer_total_grouped_sold"></td>
+                                        <td id="footer_total_grouped_bonus"></td>
                                         <td><span class="display_currency" id="footer_grouped_subtotal" data-currency_symbol ="true"></span></td>
                                     </tr>
                                 </tfoot>
@@ -260,6 +264,7 @@
                                     { data: 'category_name', name: 'cat.name' },
                                     { data: 'current_stock', name: 'current_stock', searchable: false, orderable: false },
                                     { data: 'total_qty_sold', name: 'total_qty_sold', searchable: false },
+                                    { data: 'total_bonus_given', name: 'total_bonus_given', defaultContent: '0', searchable: false, orderable: false },
                                     { data: 'subtotal', name: 'subtotal', searchable: false },
                                 ],
                                 fnDrawCallback: function(oSettings) {
@@ -268,6 +273,9 @@
                                     );
                                     $('#footer_psr_by_cat_total_sold').html(
                                         __sum_stock($('#product_sell_report_by_category'), 'sell_qty')
+                                    );
+                                    $('#footer_psr_by_cat_total_bonus').html(
+                                        __sum_stock($('#product_sell_report_by_category'), 'bonus_qty')
                                     );
 
                                     $('#footer_psr_by_cat_total_stock').html(
@@ -317,6 +325,7 @@
                                     { data: 'brand_name', name: 'b.name' },
                                     { data: 'current_stock', name: 'current_stock', searchable: false, orderable: false },
                                     { data: 'total_qty_sold', name: 'total_qty_sold', searchable: false },
+                                    { data: 'total_bonus_given', name: 'total_bonus_given', defaultContent: '0', searchable: false, orderable: false },
                                     { data: 'subtotal', name: 'subtotal', searchable: false },
                                 ],
                                 fnDrawCallback: function(oSettings) {
@@ -326,8 +335,11 @@
                                     $('#footer_psr_by_brand_total_sold').html(
                                         __sum_stock($('#product_sell_report_by_brand'), 'sell_qty')
                                     );
+                                    $('#footer_psr_by_brand_total_bonus').html(
+                                        __sum_stock($('#product_sell_report_by_brand'), 'bonus_qty')
+                                    );
 
-                                    $('#footer_psr_by_cat_total_stock').html(
+                                    $('#footer_psr_by_brand_total_stock').html(
                                         __sum_stock($('#product_sell_report_by_brand'), 'current_stock')
                                     );
                                     __currency_convert_recursively($('#product_sell_report_by_brand'));

@@ -1911,6 +1911,10 @@ class ProductUtil extends Util
                   JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                   WHERE transactions.status='final' AND transactions.type='sell' AND transactions.location_id=vld.location_id
                   AND TSL.variation_id=variations.id) as total_sold"),
+            DB::raw("(SELECT SUM(COALESCE(TSL.bonus_quantity, 0)) FROM transactions 
+                  JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
+                  WHERE transactions.status='final' AND transactions.type='sell' AND transactions.location_id=vld.location_id
+                  AND TSL.variation_id=variations.id) as total_bonus_given"),
             DB::raw("(SELECT SUM(IF(transactions.type='sell_transfer', TSL.quantity, 0) ) FROM transactions 
                   JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                   WHERE transactions.status='final' AND transactions.type='sell_transfer' AND transactions.location_id=vld.location_id AND (TSL.variation_id=variations.id)) as total_transfered"),
@@ -2097,6 +2101,7 @@ class ProductUtil extends Util
                                     'transactions.id as transaction_id',
                                     'transactions.type as transaction_type',
                                     'sl.quantity as sell_line_quantity',
+                                    'sl.bonus_quantity as sell_line_bonus_quantity',
                                     'pl.quantity as purchase_line_quantity',
                                     'pl.bonus_quantity as purchase_line_bonus_quantity',
                                     'rsl.quantity_returned as sell_return',
@@ -2131,12 +2136,14 @@ class ProductUtil extends Util
                 if ($stock_line->status != 'final') {
                     continue;
                 }
-                $quantity_change = -1 * $stock_line->sell_line_quantity;
+                $bonus_qty = !empty($stock_line->sell_line_bonus_quantity) ? $stock_line->sell_line_bonus_quantity : 0;
+                $quantity_change = -1 * ($stock_line->sell_line_quantity + $bonus_qty);
                 $stock += $quantity_change;
 
                 $stock_in_second_unit -= $stock_line->sell_secondary_unit_quantity;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'sell',
                     'type_label' => __('sale.sale'),

@@ -888,6 +888,28 @@ $(document).ready(function() {
             $('.nav-tabs li.active').find('a[data-toggle="tab"]').trigger('shown.bs.tab');
         });
 
+        // Check visibility for custom fields before DataTable initialization
+        var psr_cf1_visible = false;
+        var psr_cf2_visible = false;
+        try {
+            var cf1_elem = $('#psr_product_custom_field1');
+            if (cf1_elem.length > 0) {
+                var cf1_text = cf1_elem.text() || '';
+                psr_cf1_visible = cf1_text.trim().length > 0;
+            }
+        } catch(e) {
+            psr_cf1_visible = false;
+        }
+        try {
+            var cf2_elem = $('#psr_product_custom_field2');
+            if (cf2_elem.length > 0) {
+                var cf2_text = cf2_elem.text() || '';
+                psr_cf2_visible = cf2_text.trim().length > 0;
+            }
+        } catch(e) {
+            psr_cf2_visible = false;
+        }
+
         product_sell_report = $('table#product_sell_report_table').DataTable({
             processing: true,
             serverSide: true,
@@ -926,12 +948,11 @@ $(document).ready(function() {
             columns: [
                 { data: 'product_name', name: 'p.name'},
                 { data: 'sub_sku', name: 'v.sub_sku' },
-                { data: 'product_custom_field1', name: 'p.product_custom_field1', "visible": $('#psr_product_custom_field1').html().trim().length > 0},
-                { data: 'product_custom_field2', name: 'p.product_custom_field2', "visible": $('#psr_product_custom_field2').html().trim().length > 0},
+                { data: 'product_custom_field1', name: 'p.product_custom_field1', visible: psr_cf1_visible},
+                { data: 'product_custom_field2', name: 'p.product_custom_field2', visible: psr_cf2_visible},
                 { data: 'customer', name: 'c.name' },
                 { data: 'contact_id', name: 'c.contact_id' },
                 { data: 'contact_no', name: 'c.mobile' },
-                { data: 'contact_email', name: 'c.email' },
                 { data: 'invoice_no', name: 't.invoice_no' },
                 { data: 'transaction_date', name: 't.transaction_date' },
                 { data: 'sell_qty', name: 'transaction_sell_lines.quantity' },
@@ -993,7 +1014,6 @@ $(document).ready(function() {
             { data: 'sub_sku', name: 'v.sub_sku' },
             { data: 'customer', name: 'c.name' },
             { data: 'contact_no', name: 'c.mobile' },
-            { data: 'contact_email', name: 'c.email' },
             { data: 'invoice_no', name: 't.invoice_no' },
             { data: 'transaction_date', name: 't.transaction_date' },
             { data: 'ref_no', name: 'purchase.ref_no' },

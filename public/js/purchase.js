@@ -302,6 +302,17 @@ $(document).ready(function() {
         update_grand_total();
     });
 
+    // Handle bonus quantity changes - does not affect line totals or pricing
+    $(document).on('change', '.purchase_bonus_quantity', function() {
+        // Bonus quantity is for display and stock purposes only
+        // It does not affect line totals or pricing calculations
+        // Just ensure the value is properly formatted
+        var bonus_qty = __read_number($(this), true);
+        if (bonus_qty < 0) {
+            __write_number($(this), 0, true);
+        }
+    });
+
     $(document).on('change', '.purchase_unit_cost_without_discount', function() {
         var purchase_before_discount = __read_number($(this), true);
 

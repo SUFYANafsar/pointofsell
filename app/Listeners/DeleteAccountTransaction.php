@@ -32,11 +32,8 @@ class DeleteAccountTransaction
      */
     public function handle($event)
     {
-        //Add contact advance if exists
-        if ($event->transactionPayment->method == 'advance') {
-            $this->transactionUtil->updateContactBalance($event->transactionPayment->payment_for, $event->transactionPayment->amount);
-        }
-
+        // Advance payment logic removed - no longer using advance payment method
+        
         if (! $this->moduleUtil->isModuleEnabled('account')) {
             return true;
         }

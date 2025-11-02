@@ -55,7 +55,28 @@
                     data-msg-max-value="{{__('lang_v1.max_quantity_quantity_allowed', ['quantity' => $max_quantity])}}" 
                 @endif
             >
-
+            
+            @php
+                $bonus_quantity_value = 0;
+                if (!empty($purchase_line) && isset($purchase_line->bonus_quantity)) {
+                    $bonus_quantity_value = $purchase_line->bonus_quantity;
+                } elseif (!empty($purchase_order_line) && isset($purchase_order_line->bonus_quantity)) {
+                    $bonus_quantity_value = $purchase_order_line->bonus_quantity;
+                } elseif (!empty($purchase_requisition_line) && isset($purchase_requisition_line->bonus_quantity)) {
+                    $bonus_quantity_value = $purchase_requisition_line->bonus_quantity;
+                }
+            @endphp
+            <br>
+            <small class="text-muted">@lang('lang_v1.bonus_qty'):</small>
+            <input type="text" 
+                name="purchases[{{$row_count}}][bonus_quantity]" 
+                value="{{@format_quantity($bonus_quantity_value)}}"
+                class="form-control input-sm purchase_bonus_quantity input_number"
+                data-rule-abs_digit={{$check_decimal}}
+                data-msg-abs_digit="{{__('lang_v1.decimal_value_not_allowed')}}"
+                style="border-color: #5bc0de; background-color: #e7f3ff;"
+                placeholder="0"
+            >
 
             <input type="hidden" class="base_unit_cost" value="{{$variation->default_purchase_price}}">
             <input type="hidden" class="base_unit_selling_price" value="{{$variation->sell_price_inc_tax}}">

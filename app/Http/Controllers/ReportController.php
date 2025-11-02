@@ -1747,6 +1747,7 @@ class ReportController extends Controller
                         't.transaction_date as transaction_date',
                         'purchase_lines.purchase_price_inc_tax as unit_purchase_price',
                         DB::raw('(purchase_lines.quantity - purchase_lines.quantity_returned) as purchase_qty'),
+                        DB::raw('COALESCE(purchase_lines.bonus_quantity, 0) as bonus_qty'),
                         'purchase_lines.quantity_adjusted',
                         'u.short_name as unit',
                         DB::raw('((purchase_lines.quantity - purchase_lines.quantity_returned - purchase_lines.quantity_adjusted) * purchase_lines.purchase_price_inc_tax) as subtotal')
@@ -1797,6 +1798,11 @@ class ReportController extends Controller
                  ->editColumn('purchase_qty', function ($row) {
                      return '<span data-is_quantity="true" class="display_currency purchase_qty" data-currency_symbol=false data-orig-value="'.(float) $row->purchase_qty.'" data-unit="'.$row->unit.'" >'.(float) $row->purchase_qty.'</span> '.$row->unit;
                  })
+                 ->addColumn('bonus_qty', function ($row) {
+                     $bonus_qty = isset($row->bonus_qty) && $row->bonus_qty !== null ? (float) $row->bonus_qty : 0;
+                     $unit = isset($row->unit) ? $row->unit : '';
+                     return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                 })
                  ->editColumn('quantity_adjusted', function ($row) {
                      return '<span data-is_quantity="true" class="display_currency quantity_adjusted" data-currency_symbol=false data-orig-value="'.(float) $row->quantity_adjusted.'" data-unit="'.$row->unit.'" >'.(float) $row->quantity_adjusted.'</span> '.$row->unit;
                  })
@@ -1810,7 +1816,7 @@ class ReportController extends Controller
                     return $this->transactionUtil->num_f($row->unit_purchase_price, true);
                 })
                 ->editColumn('supplier', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$supplier}}')
-                ->rawColumns(['ref_no', 'unit_purchase_price', 'subtotal', 'purchase_qty', 'quantity_adjusted', 'supplier'])
+                ->rawColumns(['ref_no', 'unit_purchase_price', 'subtotal', 'purchase_qty', 'bonus_qty', 'quantity_adjusted', 'supplier'])
                 ->make(true);
         }
 

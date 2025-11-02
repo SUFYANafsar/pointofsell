@@ -802,6 +802,7 @@ $(document).ready(function() {
             { data: 'ref_no', name: 't.ref_no' },
             { data: 'transaction_date', name: 't.transaction_date' },
             { data: 'purchase_qty', name: 'purchase_lines.quantity' },
+            { data: 'bonus_qty', name: 'bonus_qty', defaultContent: '0', searchable: false, orderable: false },
             { data: 'quantity_adjusted', name: 'purchase_lines.quantity_adjusted' },
             { data: 'unit_purchase_price', name: 'purchase_lines.purchase_price_inc_tax' },
             { data: 'subtotal', name: 'subtotal', searchable: false },
@@ -812,6 +813,9 @@ $(document).ready(function() {
             );
             $('#footer_total_purchase').html(
                 __sum_stock($('#product_purchase_report_table'), 'purchase_qty')
+            );
+            $('#footer_total_bonus').html(
+                __sum_stock($('#product_purchase_report_table'), 'bonus_qty')
             );
             $('#footer_total_adjusted').html(
                 __sum_stock($('#product_purchase_report_table'), 'quantity_adjusted')

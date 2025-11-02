@@ -727,9 +727,7 @@ class TransactionUtil extends Util
                 $this->editPaymentLine($payment, $transaction, $uf_data);
             } else {
                 $payment_amount = $uf_data ? $this->num_uf($payment['amount']) : $payment['amount'];
-                if ($payment['method'] == 'advance' && $payment_amount > $contact_balance) {
-                    throw new AdvanceBalanceNotAvailable(__('lang_v1.required_advance_balance_not_available'));
-                }
+                // Advance payment validation removed - no longer using advance payment method
                 //If amount is 0 then skip.
                 if ($payment_amount != 0) {
                     $prefix_type = 'sell_payment';

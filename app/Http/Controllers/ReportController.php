@@ -1332,28 +1332,32 @@ class ReportController extends Controller
 
             $commsn_calculation_type = empty($pos_settings['cmmsn_calculation_type']) || $pos_settings['cmmsn_calculation_type'] == 'invoice_value' ? 'invoice_value' : $pos_settings['cmmsn_calculation_type'];
 
-            $commission_percentage = User::find($commission_agent)->cmmsn_percent;
-
             if ($commsn_calculation_type == 'payment_received') {
                 $payment_details = $this->transactionUtil->getTotalPaymentWithCommission($business_id, $start_date, $end_date, $location_id, $commission_agent);
 
-                //Get Commision
-                $total_commission = $commission_percentage * $payment_details['total_payment_with_commission'] / 100;
+                // Commission is already calculated in getTotalPaymentWithCommission based on product_custom_field2
+                // Calculate effective percentage for display purposes
+                $total_payment = $payment_details['total_payment_with_commission'] ?? 0;
+                $total_commission = $payment_details['total_commission'] ?? 0;
+                $effective_percentage = $total_payment > 0 ? ($total_commission / $total_payment) * 100 : 0;
 
-                return ['total_payment_with_commission' => $payment_details['total_payment_with_commission'] ?? 0,
+                return ['total_payment_with_commission' => $total_payment,
                     'total_commission' => $total_commission,
-                    'commission_percentage' => $commission_percentage,
+                    'commission_percentage' => round($effective_percentage, 2), // Effective percentage for display
                 ];
             }
 
             $sell_details = $this->transactionUtil->getTotalSellCommission($business_id, $start_date, $end_date, $location_id, $commission_agent);
 
-            //Get Commision
-            $total_commission = $commission_percentage * $sell_details['total_sales_with_commission'] / 100;
+            // Commission is already calculated in getTotalSellCommission based on product_custom_field2
+            // Calculate effective percentage for display purposes
+            $total_sales = $sell_details['total_sales_with_commission'] ?? 0;
+            $total_commission = $sell_details['total_commission'] ?? 0;
+            $effective_percentage = $total_sales > 0 ? ($total_commission / $total_sales) * 100 : 0;
 
-            return ['total_sales_with_commission' => $sell_details['total_sales_with_commission'],
+            return ['total_sales_with_commission' => $total_sales,
                 'total_commission' => $total_commission,
-                'commission_percentage' => $commission_percentage,
+                'commission_percentage' => round($effective_percentage, 2), // Effective percentage for display
             ];
         }
     }

@@ -3984,12 +3984,18 @@ class TransactionUtil extends Util
      */
     public function getTotalSellCommission($business_id, $start_date = null, $end_date = null, $location_id = null, $commission_agent = null)
     {
-        //Query to sum total sell without line tax and order tax
+        //Query to get line items with product details for commission calculation
         $query = TransactionSellLine::leftjoin('transactions as t', 'transaction_sell_lines.transaction_id', '=', 't.id')
+                            ->leftjoin('products as p', 'transaction_sell_lines.product_id', '=', 'p.id')
                             ->where('t.business_id', $business_id)
                             ->where('t.type', 'sell')
                             ->where('t.status', 'final')
-                            ->select(DB::raw('SUM( (transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price ) as final_total'));
+                            ->select(
+                                'transaction_sell_lines.quantity',
+                                'transaction_sell_lines.quantity_returned',
+                                'transaction_sell_lines.unit_price',
+                                'p.product_custom_field2'
+                            );
 
         //Check for permitted locations of a user
         $permitted_locations = auth()->user()->permitted_locations();
@@ -4010,16 +4016,46 @@ class TransactionUtil extends Util
             $query->where('t.commission_agent', $commission_agent);
         }
 
-        $sell_details = $query->get();
+        $sell_lines = $query->get();
 
-        $output['total_sales_with_commission'] = $sell_details->sum('final_total');
+        $total_sales = 0;
+        $total_commission = 0;
+
+        foreach ($sell_lines as $line) {
+            $line_quantity = $line->quantity - $line->quantity_returned;
+            $line_total = $line_quantity * $line->unit_price;
+            $total_sales += $line_total;
+
+            // Calculate commission based on product_custom_field2
+            if (!empty($line->product_custom_field2)) {
+                $custom_field = trim($line->product_custom_field2);
+                
+                // Check if it contains % symbol (percentage commission)
+                if (strpos($custom_field, '%') !== false) {
+                    // Extract percentage value (remove % and convert to number)
+                    $percentage = (float) str_replace('%', '', $custom_field);
+                    $line_commission = ($line_total * $percentage) / 100;
+                } else {
+                    // Fixed amount commission (per unit)
+                    $fixed_amount = (float) $custom_field;
+                    $line_commission = $fixed_amount * $line_quantity;
+                }
+                
+                $total_commission += $line_commission;
+            }
+            // If product_custom_field2 is empty, commission is 0 (skip commission)
+        }
+
+        $output['total_sales_with_commission'] = $total_sales;
+        $output['total_commission'] = $total_commission;
 
         return $output;
     }
 
     public function getTotalPaymentWithCommission($business_id, $start_date = null, $end_date = null, $location_id = null, $commission_agent = null)
     {
-        $query = TransactionPayment::join('transactions as t',
+        // Get total payments first
+        $payment_query = TransactionPayment::join('transactions as t',
             'transaction_payments.transaction_id', '=', 't.id')
                             ->where('t.business_id', $business_id)
                             ->where('t.type', 'sell')
@@ -4029,25 +4065,89 @@ class TransactionUtil extends Util
         //Check for permitted locations of a user
         $permitted_locations = auth()->user()->permitted_locations();
         if ($permitted_locations != 'all') {
-            $query->whereIn('t.location_id', $permitted_locations);
+            $payment_query->whereIn('t.location_id', $permitted_locations);
         }
 
         if (! empty($start_date) && ! empty($end_date)) {
-            $query->whereBetween(DB::raw('date(paid_on)'), [$start_date, $end_date]);
+            $payment_query->whereBetween(DB::raw('date(paid_on)'), [$start_date, $end_date]);
         }
 
         //Filter by the location
         if (! empty($location_id)) {
-            $query->where('t.location_id', $location_id);
+            $payment_query->where('t.location_id', $location_id);
         }
 
         if (! empty($commission_agent)) {
-            $query->where('t.commission_agent', $commission_agent);
+            $payment_query->where('t.commission_agent', $commission_agent);
         }
 
-        $payment_details = $query->first();
+        $payment_details = $payment_query->first();
+        $total_payment = $payment_details->total_paid ?? 0;
 
-        $output['total_payment_with_commission'] = $payment_details->total_paid;
+        // Get line items for transactions that have payments to calculate commission
+        $line_query = TransactionSellLine::leftjoin('transactions as t', 'transaction_sell_lines.transaction_id', '=', 't.id')
+                            ->leftjoin('products as p', 'transaction_sell_lines.product_id', '=', 'p.id')
+                            ->join('transaction_payments as tp', 't.id', '=', 'tp.transaction_id')
+                            ->where('t.business_id', $business_id)
+                            ->where('t.type', 'sell')
+                            ->where('t.status', 'final')
+                            ->select(
+                                'transaction_sell_lines.id',
+                                'transaction_sell_lines.quantity',
+                                'transaction_sell_lines.quantity_returned',
+                                'transaction_sell_lines.unit_price',
+                                'p.product_custom_field2'
+                            )
+                            ->groupBy('transaction_sell_lines.id', 'transaction_sell_lines.quantity', 'transaction_sell_lines.quantity_returned', 'transaction_sell_lines.unit_price', 'p.product_custom_field2');
+
+        //Check for permitted locations of a user
+        if ($permitted_locations != 'all') {
+            $line_query->whereIn('t.location_id', $permitted_locations);
+        }
+
+        if (! empty($start_date) && ! empty($end_date)) {
+            $line_query->whereBetween(DB::raw('date(tp.paid_on)'), [$start_date, $end_date]);
+        }
+
+        //Filter by the location
+        if (! empty($location_id)) {
+            $line_query->where('t.location_id', $location_id);
+        }
+
+        if (! empty($commission_agent)) {
+            $line_query->where('t.commission_agent', $commission_agent);
+        }
+
+        $sell_lines = $line_query->get();
+
+        $total_commission = 0;
+
+        foreach ($sell_lines as $line) {
+            $line_quantity = $line->quantity - $line->quantity_returned;
+            $line_total = $line_quantity * $line->unit_price;
+
+            // Calculate commission based on product_custom_field2
+            if (!empty($line->product_custom_field2)) {
+                $custom_field = trim($line->product_custom_field2);
+                
+                // Check if it contains % symbol (percentage commission)
+                if (strpos($custom_field, '%') !== false) {
+                    // Extract percentage value (remove % and convert to number)
+                    $percentage = (float) str_replace('%', '', $custom_field);
+                    $line_commission = ($line_total * $percentage) / 100;
+                } else {
+                    // Fixed amount commission (per unit)
+                    $fixed_amount = (float) $custom_field;
+                    $line_commission = $fixed_amount * $line_quantity;
+                }
+                
+                $total_commission += $line_commission;
+            }
+            // If product_custom_field2 is empty, commission is 0 (skip commission)
+        }
+
+        $output['total_payment_with_commission'] = $total_payment;
+        $output['total_commission'] = $total_commission;
 
         return $output;
     }

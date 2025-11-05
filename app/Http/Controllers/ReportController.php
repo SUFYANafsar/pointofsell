@@ -683,6 +683,10 @@ class ReportController extends Controller
 
                         WHERE transactions.status='final' AND transactions.type='sell' $location_filter 
                         AND (TSL.variation_id=v.id OR TPL.variation_id=v.id)) as total_sold"),
+                DB::raw("(SELECT SUM(COALESCE(TSL.bonus_quantity, 0)) FROM transactions 
+                        LEFT JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
+                        WHERE transactions.status='final' AND transactions.type='sell' $location_filter 
+                        AND TSL.variation_id=v.id) as total_bonus_given"),
                 DB::raw("(SELECT SUM(IF(transactions.type='sell_transfer', TSL.quantity, 0) ) FROM transactions 
                         LEFT JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                         WHERE transactions.status='final' AND transactions.type='sell_transfer' $location_filter 
@@ -1747,6 +1751,7 @@ class ReportController extends Controller
                         't.transaction_date as transaction_date',
                         'purchase_lines.purchase_price_inc_tax as unit_purchase_price',
                         DB::raw('(purchase_lines.quantity - purchase_lines.quantity_returned) as purchase_qty'),
+                        DB::raw('COALESCE(purchase_lines.bonus_quantity, 0) as bonus_qty'),
                         'purchase_lines.quantity_adjusted',
                         'u.short_name as unit',
                         DB::raw('((purchase_lines.quantity - purchase_lines.quantity_returned - purchase_lines.quantity_adjusted) * purchase_lines.purchase_price_inc_tax) as subtotal')
@@ -1797,6 +1802,11 @@ class ReportController extends Controller
                  ->editColumn('purchase_qty', function ($row) {
                      return '<span data-is_quantity="true" class="display_currency purchase_qty" data-currency_symbol=false data-orig-value="'.(float) $row->purchase_qty.'" data-unit="'.$row->unit.'" >'.(float) $row->purchase_qty.'</span> '.$row->unit;
                  })
+                 ->addColumn('bonus_qty', function ($row) {
+                     $bonus_qty = isset($row->bonus_qty) && $row->bonus_qty !== null ? (float) $row->bonus_qty : 0;
+                     $unit = isset($row->unit) ? $row->unit : '';
+                     return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                 })
                  ->editColumn('quantity_adjusted', function ($row) {
                      return '<span data-is_quantity="true" class="display_currency quantity_adjusted" data-currency_symbol=false data-orig-value="'.(float) $row->quantity_adjusted.'" data-unit="'.$row->unit.'" >'.(float) $row->quantity_adjusted.'</span> '.$row->unit;
                  })
@@ -1810,7 +1820,7 @@ class ReportController extends Controller
                     return $this->transactionUtil->num_f($row->unit_purchase_price, true);
                 })
                 ->editColumn('supplier', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$supplier}}')
-                ->rawColumns(['ref_no', 'unit_purchase_price', 'subtotal', 'purchase_qty', 'quantity_adjusted', 'supplier'])
+                ->rawColumns(['ref_no', 'unit_purchase_price', 'subtotal', 'purchase_qty', 'bonus_qty', 'quantity_adjusted', 'supplier'])
                 ->make(true);
         }
 
@@ -1884,6 +1894,7 @@ class ReportController extends Controller
                     'transaction_sell_lines.unit_price_before_discount as unit_price',
                     'transaction_sell_lines.unit_price_inc_tax as unit_sale_price',
                     DB::raw('(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as sell_qty'),
+                    DB::raw('COALESCE(transaction_sell_lines.bonus_quantity, 0) as bonus_qty'),
                     'transaction_sell_lines.line_discount_type as discount_type',
                     'transaction_sell_lines.line_discount_amount as discount_amount',
                     'transaction_sell_lines.item_tax',
@@ -1961,6 +1972,11 @@ class ReportController extends Controller
                     data-unit="'.$row->unit.'" >'.
                     $this->transactionUtil->num_f($row->sell_qty, false, null, true).'</span> '.$row->unit;
                 })
+                ->addColumn('bonus_qty', function ($row) {
+                    $bonus_qty = isset($row->bonus_qty) && $row->bonus_qty !== null ? (float) $row->bonus_qty : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                  ->editColumn('subtotal', function ($row) {
                      //ignore child sell line of combo product
                      $class = is_null($row->parent_sell_line_id) ? 'row_subtotal' : '';
@@ -1999,7 +2015,7 @@ class ReportController extends Controller
                     return $html;
                 })
                 ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
-                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount', 'unit_price', 'tax', 'customer', 'payment_methods'])
+                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'bonus_qty', 'discount_amount', 'unit_price', 'tax', 'customer', 'payment_methods'])
                 ->make(true);
         }
 
@@ -2325,6 +2341,7 @@ class ReportController extends Controller
             $supplier_id = $request->get('supplier_id', null);
             $contact_filter1 = ! empty($supplier_id) ? "AND t.contact_id=$supplier_id" : '';
             $contact_filter2 = ! empty($supplier_id) ? "AND transactions.contact_id=$supplier_id" : '';
+            $contact_filter3 = ! empty($supplier_id) ? "AND transaction_payments.payment_for=$supplier_id" : '';
 
             $location_id = $request->get('location_id', null);
 
@@ -2335,19 +2352,27 @@ class ReportController extends Controller
                     ->where('t.business_id', $business_id)
                     ->whereIn('t.type', ['purchase', 'opening_balance']);
             })
+                ->leftjoin('contacts as c', function ($join) use ($business_id) {
+                    $join->on('transaction_payments.payment_for', '=', 'c.id')
+                        ->where('c.business_id', $business_id);
+                })
                 ->where('transaction_payments.business_id', $business_id)
-                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $parent_payment_query_part) {
+                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $contact_filter3, $parent_payment_query_part) {
                     $q->whereRaw("(transaction_payments.transaction_id IS NOT NULL AND t.type IN ('purchase', 'opening_balance')  $parent_payment_query_part $contact_filter1)")
-                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('purchase', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)");
+                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('purchase', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)")
+                        ->orWhereRaw("(transaction_payments.transaction_id IS NULL AND transaction_payments.payment_for IS NOT NULL AND c.type IN ('supplier', 'both') AND (transaction_payments.payment_type = 'debit' OR transaction_payments.is_advance = 1) $parent_payment_query_part $contact_filter3)");
                 })
 
                 ->select(
                     DB::raw("IF(transaction_payments.transaction_id IS NULL, 
-                                (SELECT c.name FROM transactions as ts
-                                JOIN contacts as c ON ts.contact_id=c.id 
-                                WHERE ts.id=(
-                                        SELECT tps.transaction_id FROM transaction_payments as tps
-                                        WHERE tps.parent_id=transaction_payments.id LIMIT 1
+                                IF(transaction_payments.payment_for IS NOT NULL,
+                                    (SELECT CONCAT(COALESCE(c.supplier_business_name, ''), '<br>', c.name) FROM contacts as c WHERE c.id=transaction_payments.payment_for),
+                                    (SELECT c.name FROM transactions as ts
+                                    JOIN contacts as c ON ts.contact_id=c.id 
+                                    WHERE ts.id=(
+                                            SELECT tps.transaction_id FROM transaction_payments as tps
+                                            WHERE tps.parent_id=transaction_payments.id LIMIT 1
+                                        )
                                     )
                                 ),
                                 (SELECT CONCAT(COALESCE(c.supplier_business_name, ''), '<br>', c.name) FROM transactions as ts JOIN
@@ -2378,11 +2403,17 @@ class ReportController extends Controller
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
-                $query->whereIn('t.location_id', $permitted_locations);
+                $query->where(function ($q) use ($permitted_locations) {
+                    $q->whereIn('t.location_id', $permitted_locations)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($location_id)) {
-                $query->where('t.location_id', $location_id);
+                $query->where(function ($q) use ($location_id) {
+                    $q->where('t.location_id', $location_id)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
@@ -2449,6 +2480,7 @@ class ReportController extends Controller
             $customer_id = $request->get('supplier_id', null);
             $contact_filter1 = ! empty($customer_id) ? "AND t.contact_id=$customer_id" : '';
             $contact_filter2 = ! empty($customer_id) ? "AND transactions.contact_id=$customer_id" : '';
+            $contact_filter3 = ! empty($customer_id) ? "AND transaction_payments.payment_for=$customer_id" : '';
 
             $location_id = $request->get('location_id', null);
             $parent_payment_query_part = empty($location_id) ? 'AND transaction_payments.parent_id IS NULL' : '';
@@ -2460,6 +2492,10 @@ class ReportController extends Controller
             })
                 ->leftjoin('contacts as c', 't.contact_id', '=', 'c.id')
                 ->leftjoin('customer_groups AS CG', 'c.customer_group_id', '=', 'CG.id')
+                ->leftjoin('contacts as c_payment_for', function ($join) use ($business_id) {
+                    $join->on('transaction_payments.payment_for', '=', 'c_payment_for.id')
+                        ->where('c_payment_for.business_id', $business_id);
+                })
 
             
             //     DB::raw("IF(transaction_payments.transaction_id IS NULL, 
@@ -2481,15 +2517,18 @@ class ReportController extends Controller
                     SELECT 
                         tp.id as payment_id, 
                         IF(tp.transaction_id IS NULL, 
-                            (SELECT c.name 
-                             FROM transactions as ts
-                             JOIN contacts as c ON ts.contact_id = c.id 
-                             WHERE ts.id = (
-                                SELECT tps.transaction_id 
-                                FROM transaction_payments as tps 
-                                WHERE tps.parent_id = tp.id 
-                                LIMIT 1
-                             )
+                            IF(tp.payment_for IS NOT NULL,
+                                (SELECT CONCAT(COALESCE(CONCAT(c.supplier_business_name, '<br>'), ''), c.name) FROM contacts c WHERE c.id = tp.payment_for),
+                                (SELECT c.name 
+                                 FROM transactions as ts
+                                 JOIN contacts as c ON ts.contact_id = c.id 
+                                 WHERE ts.id = (
+                                    SELECT tps.transaction_id 
+                                    FROM transaction_payments as tps 
+                                    WHERE tps.parent_id = tp.id 
+                                    LIMIT 1
+                                 )
+                                )
                             ), 
                             CONCAT(COALESCE(CONCAT(c.supplier_business_name, '<br>'), ''), c.name)
                         ) as customer_name
@@ -2498,9 +2537,10 @@ class ReportController extends Controller
                     LEFT JOIN contacts c ON t.contact_id = c.id
                 ) as customer_subquery"), 'transaction_payments.id', '=', 'customer_subquery.payment_id')              
                 ->where('transaction_payments.business_id', $business_id)
-                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $parent_payment_query_part) {
+                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $contact_filter3, $parent_payment_query_part) {
                     $q->whereRaw("(transaction_payments.transaction_id IS NOT NULL AND t.type IN ('sell', 'opening_balance') $parent_payment_query_part $contact_filter1)")
-                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('sell', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)");
+                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('sell', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)")
+                        ->orWhereRaw("(transaction_payments.transaction_id IS NULL AND transaction_payments.payment_for IS NOT NULL AND c_payment_for.type IN ('customer', 'both') AND (transaction_payments.payment_type IN ('credit', 'debit') OR transaction_payments.is_advance = 1) $parent_payment_query_part $contact_filter3)");
                 })
                 ->select(
                     'customer_subquery.customer_name as customer',
@@ -2530,15 +2570,24 @@ class ReportController extends Controller
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
-                $query->whereIn('t.location_id', $permitted_locations);
+                $query->where(function ($q) use ($permitted_locations) {
+                    $q->whereIn('t.location_id', $permitted_locations)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($request->get('customer_group_id'))) {
-                $query->where('CG.id', $request->get('customer_group_id'));
+                $query->where(function ($q) use ($request) {
+                    $q->where('CG.id', $request->get('customer_group_id'))
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($location_id)) {
-                $query->where('t.location_id', $location_id);
+                $query->where(function ($q) use ($location_id) {
+                    $q->where('t.location_id', $location_id)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
             if (! empty($request->has('commission_agent'))) {
                 $query->where('t.commission_agent', $request->get('commission_agent'));
@@ -2718,6 +2767,7 @@ class ReportController extends Controller
                     DB::raw('DATE_FORMAT(t.transaction_date, "%Y-%m-%d") as formated_date'),
                     DB::raw("(SELECT SUM(vld.qty_available) FROM variation_location_details as vld WHERE vld.variation_id=v.id $vld_str) as current_stock"),
                     DB::raw('SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as total_qty_sold'),
+                    DB::raw('SUM(COALESCE(transaction_sell_lines.bonus_quantity, 0)) as total_bonus_given'),
                     'u.short_name as unit',
                     DB::raw('SUM((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal')
                 )
@@ -2778,6 +2828,11 @@ class ReportController extends Controller
                 ->editColumn('total_qty_sold', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency sell_qty" data-currency_symbol=false data-orig-value="'.(float) $row->total_qty_sold.'" data-unit="'.$row->unit.'" >'.(float) $row->total_qty_sold.'</span> '.$row->unit;
                 })
+                ->addColumn('total_bonus_given', function ($row) {
+                    $bonus_qty = isset($row->total_bonus_given) && $row->total_bonus_given !== null ? (float) $row->total_bonus_given : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                 ->editColumn('current_stock', function ($row) {
                     if ($row->enable_stock) {
                         return '<span data-is_quantity="true" class="display_currency current_stock" data-currency_symbol=false data-orig-value="'.(float) $row->current_stock.'" data-unit="'.$row->unit.'" >'.(float) $row->current_stock.'</span> '.$row->unit;
@@ -2792,7 +2847,7 @@ class ReportController extends Controller
                      $this->transactionUtil->num_f($row->subtotal, true).'</span>';
                  })
 
-                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold'])
+                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'total_bonus_given'])
                 ->make(true);
         }
     }
@@ -2840,6 +2895,7 @@ class ReportController extends Controller
                     'cat.name as category_name',
                     DB::raw("(SELECT SUM(vld.qty_available) FROM variation_location_details as vld WHERE vld.variation_id=transaction_sell_lines.variation_id $vld_str) as current_stock"),
                     DB::raw('SUM(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as total_qty_sold'),
+                    DB::raw('SUM(COALESCE(transaction_sell_lines.bonus_quantity, 0)) as total_bonus_given'),
                     DB::raw('SUM((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal'),
                     'transaction_sell_lines.parent_sell_line_id'
                 );
@@ -2894,6 +2950,11 @@ class ReportController extends Controller
                 ->editColumn('total_qty_sold', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency sell_qty" data-currency_symbol=false data-orig-value="'.(float) $row->total_qty_sold.'" data-unit="" >'.(float) $row->total_qty_sold.'</span> '.$row->unit;
                 })
+                ->addColumn('total_bonus_given', function ($row) {
+                    $bonus_qty = isset($row->total_bonus_given) && $row->total_bonus_given !== null ? (float) $row->total_bonus_given : 0;
+                    $unit = isset($row->unit) ? $row->unit : '';
+                    return '<span data-is_quantity="true" class="display_currency bonus_qty text-info" data-currency_symbol=false data-orig-value="'.$bonus_qty.'" data-unit="'.$unit.'" >'.$bonus_qty.'</span> '.$unit;
+                })
                 ->editColumn('current_stock', function ($row) {
                     return '<span data-is_quantity="true" class="display_currency current_stock" data-currency_symbol=false data-orig-value="'.(float) $row->current_stock.'" data-unit="">'.(float) $row->current_stock.'</span> ';
                 })
@@ -2904,7 +2965,7 @@ class ReportController extends Controller
                     .$this->transactionUtil->num_f($row->subtotal, true).'</span>';
                  })
 
-                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'category_name'])
+                ->rawColumns(['current_stock', 'subtotal', 'total_qty_sold', 'total_bonus_given', 'category_name'])
                 ->make(true);
         }
     }

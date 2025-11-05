@@ -802,6 +802,7 @@ $(document).ready(function() {
             { data: 'ref_no', name: 't.ref_no' },
             { data: 'transaction_date', name: 't.transaction_date' },
             { data: 'purchase_qty', name: 'purchase_lines.quantity' },
+            { data: 'bonus_qty', name: 'bonus_qty', defaultContent: '0', searchable: false, orderable: false },
             { data: 'quantity_adjusted', name: 'purchase_lines.quantity_adjusted' },
             { data: 'unit_purchase_price', name: 'purchase_lines.purchase_price_inc_tax' },
             { data: 'subtotal', name: 'subtotal', searchable: false },
@@ -812,6 +813,9 @@ $(document).ready(function() {
             );
             $('#footer_total_purchase').html(
                 __sum_stock($('#product_purchase_report_table'), 'purchase_qty')
+            );
+            $('#footer_total_bonus').html(
+                __sum_stock($('#product_purchase_report_table'), 'bonus_qty')
             );
             $('#footer_total_adjusted').html(
                 __sum_stock($('#product_purchase_report_table'), 'quantity_adjusted')
@@ -956,6 +960,7 @@ $(document).ready(function() {
                 { data: 'invoice_no', name: 't.invoice_no' },
                 { data: 'transaction_date', name: 't.transaction_date' },
                 { data: 'sell_qty', name: 'transaction_sell_lines.quantity' },
+                { data: 'bonus_qty', name: 'bonus_qty', defaultContent: '0', searchable: false, orderable: false },
                 { data: 'unit_price', name: 'transaction_sell_lines.unit_price_before_discount' },
                 { data: 'discount_amount', name: 'transaction_sell_lines.line_discount_amount' },
                 { data: 'tax', name: 'tax_rates.name' },
@@ -968,6 +973,7 @@ $(document).ready(function() {
                     sum_table_col($('#product_sell_report_table'), 'row_subtotal')
                 );
                 $('#footer_total_sold').html(__sum_stock($('#product_sell_report_table'), 'sell_qty'));
+                $('#footer_total_bonus').html(__sum_stock($('#product_sell_report_table'), 'bonus_qty'));
                 $('#footer_tax').html(__sum_stock($('#product_sell_report_table'), 'tax', 'left'));
                 __currency_convert_recursively($('#product_sell_report_table'));
             },
@@ -1066,6 +1072,7 @@ $(document).ready(function() {
             { data: 'transaction_date', name: 't.transaction_date' },
             { data: 'current_stock', name: 'current_stock', searchable: false, orderable: false },
             { data: 'total_qty_sold', name: 'total_qty_sold', searchable: false },
+            { data: 'total_bonus_given', name: 'total_bonus_given', defaultContent: '0', searchable: false, orderable: false },
             { data: 'subtotal', name: 'subtotal', searchable: false },
         ],
         fnDrawCallback: function(oSettings) {
@@ -1074,6 +1081,9 @@ $(document).ready(function() {
             );
             $('#footer_total_grouped_sold').html(
                 __sum_stock($('#product_sell_grouped_report_table'), 'sell_qty')
+            );
+            $('#footer_total_grouped_bonus').html(
+                __sum_stock($('#product_sell_grouped_report_table'), 'bonus_qty')
             );
             __currency_convert_recursively($('#product_sell_grouped_report_table'));
         },

@@ -210,6 +210,21 @@
                     <br>
                     <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $purchase_line->secondary_unit_quantity }}</span> {{$purchase_line->product->second_unit->actual_name}}
                 @endif
+                @if(!empty($purchase_line->bonus_quantity) && $purchase_line->bonus_quantity > 0)
+                    <br>
+                    <small class="text-info">
+                        <strong>@lang('lang_v1.bonus_qty'):</strong> 
+                        <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $purchase_line->bonus_quantity }}</span> 
+                        @if(!empty($purchase_line->sub_unit)) {{$purchase_line->sub_unit->actual_name}} @else {{$purchase_line->product->unit->actual_name}} @endif
+                        <span class="label label-info">FREE</span>
+                    </small>
+                    <br>
+                    <small class="text-muted">
+                        <strong>@lang('lang_v1.total_received'):</strong> 
+                        <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $purchase_line->quantity + $purchase_line->bonus_quantity }}</span> 
+                        @if(!empty($purchase_line->sub_unit)) {{$purchase_line->sub_unit->actual_name}} @else {{$purchase_line->product->unit->actual_name}} @endif
+                    </small>
+                @endif
 
               </td>
               <td class="text-right"><span class="display_currency" data-currency_symbol="true">{{ $purchase_line->pp_without_discount}}</span></td>

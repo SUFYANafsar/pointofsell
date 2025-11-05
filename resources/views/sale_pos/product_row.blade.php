@@ -267,6 +267,27 @@
 		<span class="input-group-btn"><button type="button" class="btn btn-default btn-flat quantity-up"><i class="fa fa-plus text-success"></i></button></span>
 		</div>
 		
+		@php
+			$bonus_quantity_value = 0;
+			if (!empty($product->bonus_quantity)) {
+				$bonus_quantity_value = $product->bonus_quantity;
+			}
+		@endphp
+		<br>
+		<small class="text-muted">@lang('lang_v1.bonus_qty'):</small>
+		<input type="text"
+			name="products[{{$row_count}}][bonus_quantity]"
+			value="{{@format_quantity($bonus_quantity_value)}}"
+			class="form-control input-sm pos_bonus_quantity input_number"
+			data-decimal=@if($allow_decimal) 1 @else 0 @endif
+			@if(!$allow_decimal)
+				data-rule-abs_digit="true"
+				data-msg-abs_digit="@lang('lang_v1.decimal_value_not_allowed')"
+			@endif
+			style="border-color: #5bc0de; background-color: #e7f3ff;"
+			placeholder="0"
+		>
+		
 		<input type="hidden" name="products[{{$row_count}}][product_unit_id]" value="{{$product->unit_id}}">
 		@if(count($sub_units) > 0)
 			<br>

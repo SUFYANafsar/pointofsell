@@ -1217,16 +1217,22 @@ class ProductUtil extends Util
                 $multiplier = ! empty($unit->base_unit_multiplier) ? $unit->base_unit_multiplier : 1;
             }
             $new_quantity = $this->num_uf($data['quantity']) * $multiplier;
+            
+            // Handle bonus quantity - apply multiplier if needed
+            $bonus_quantity = ! empty($data['bonus_quantity']) ? $this->num_uf($data['bonus_quantity']) * $multiplier : 0;
+            $bonus_quantity_f = $this->num_f($bonus_quantity);
 
             $new_quantity_f = $this->num_f($new_quantity);
             $old_qty = 0;
+            $old_bonus_qty = 0;
             //update existing purchase line
             if (isset($data['purchase_line_id'])) {
                 $purchase_line = PurchaseLine::findOrFail($data['purchase_line_id']);
                 $updated_purchase_line_ids[] = $purchase_line->id;
                 $old_qty = $purchase_line->quantity;
+                $old_bonus_qty = $purchase_line->bonus_quantity ?? 0;
 
-                $this->updateProductStock($before_status, $transaction, $data['product_id'], $data['variation_id'], $new_quantity, $purchase_line->quantity, $currency_details);
+                $this->updateProductStock($before_status, $transaction, $data['product_id'], $data['variation_id'], $new_quantity, $purchase_line->quantity, $currency_details, $bonus_quantity, $old_bonus_qty);
             } else {
                 //create newly added purchase lines
                 $purchase_line = new PurchaseLine();
@@ -1236,11 +1242,16 @@ class ProductUtil extends Util
                 //Increase quantity only if status is received
                 if ($transaction->status == 'received') {
                     $this->updateProductQuantity($transaction->location_id, $data['product_id'], $data['variation_id'], $new_quantity_f, 0, $currency_details);
+                    // Also increase stock for bonus quantity
+                    if ($bonus_quantity > 0) {
+                        $this->updateProductQuantity($transaction->location_id, $data['product_id'], $data['variation_id'], $bonus_quantity_f, 0, $currency_details);
+                    }
                 }
             }
             Product::find($data['product_id'])->update(['product_custom_field1' => $data['whole_sell_price']]);
 
             $purchase_line->quantity = $new_quantity;
+            $purchase_line->bonus_quantity = $bonus_quantity;
             $purchase_line->pp_without_discount = ($this->num_uf($data['pp_without_discount'], $currency_details) * $exchange_rate) / $multiplier;
             $purchase_line->discount_percent = $this->num_uf($data['discount_percent'], $currency_details);
             $purchase_line->purchase_price = ($this->num_uf($data['purchase_price'], $currency_details) * $exchange_rate) / $multiplier;
@@ -1356,14 +1367,26 @@ class ProductUtil extends Util
      * @param  decimal  $old_quantity in database format
      * @param  array  $currency_details
      */
-    public function updateProductStock($status_before, $transaction, $product_id, $variation_id, $new_quantity, $old_quantity, $currency_details)
+    public function updateProductStock($status_before, $transaction, $product_id, $variation_id, $new_quantity, $old_quantity, $currency_details, $new_bonus_quantity = 0, $old_bonus_quantity = 0)
     {
         $new_quantity_f = $this->num_f($new_quantity);
         $old_qty = $this->num_f($old_quantity);
+        $new_bonus_qty_f = $this->num_f($new_bonus_quantity);
+        $old_bonus_qty_f = $this->num_f($old_bonus_quantity);
+        
         //Update quantity for existing products
         if ($status_before == 'received' && $transaction->status == 'received') {
             //if status received update existing quantity
             $this->updateProductQuantity($transaction->location_id, $product_id, $variation_id, $new_quantity_f, $old_qty, $currency_details);
+            // Update bonus quantity stock
+            if ($new_bonus_quantity != $old_bonus_quantity) {
+                $bonus_diff = $new_bonus_qty_f - $old_bonus_qty_f;
+                if ($bonus_diff > 0) {
+                    $this->updateProductQuantity($transaction->location_id, $product_id, $variation_id, $bonus_diff, 0, $currency_details);
+                } else {
+                    $this->decreaseProductQuantity($product_id, $variation_id, $transaction->location_id, abs($bonus_diff));
+                }
+            }
         } elseif ($status_before == 'received' && $transaction->status != 'received') {
             //decrease quantity only if status changed from received to not received
             $this->decreaseProductQuantity(
@@ -1372,8 +1395,16 @@ class ProductUtil extends Util
                 $transaction->location_id,
                 $old_quantity
             );
+            // Also decrease bonus quantity
+            if ($old_bonus_quantity > 0) {
+                $this->decreaseProductQuantity($product_id, $variation_id, $transaction->location_id, $old_bonus_quantity);
+            }
         } elseif ($status_before != 'received' && $transaction->status == 'received') {
             $this->updateProductQuantity($transaction->location_id, $product_id, $variation_id, $new_quantity_f, 0, $currency_details);
+            // Also increase stock for bonus quantity
+            if ($new_bonus_quantity > 0) {
+                $this->updateProductQuantity($transaction->location_id, $product_id, $variation_id, $new_bonus_qty_f, 0, $currency_details);
+            }
         }
     }
 
@@ -1880,6 +1911,10 @@ class ProductUtil extends Util
                   JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                   WHERE transactions.status='final' AND transactions.type='sell' AND transactions.location_id=vld.location_id
                   AND TSL.variation_id=variations.id) as total_sold"),
+            DB::raw("(SELECT SUM(COALESCE(TSL.bonus_quantity, 0)) FROM transactions 
+                  JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
+                  WHERE transactions.status='final' AND transactions.type='sell' AND transactions.location_id=vld.location_id
+                  AND TSL.variation_id=variations.id) as total_bonus_given"),
             DB::raw("(SELECT SUM(IF(transactions.type='sell_transfer', TSL.quantity, 0) ) FROM transactions 
                   JOIN transaction_sell_lines AS TSL ON transactions.id=TSL.transaction_id
                   WHERE transactions.status='final' AND transactions.type='sell_transfer' AND transactions.location_id=vld.location_id AND (TSL.variation_id=variations.id)) as total_transfered"),
@@ -1978,11 +2013,11 @@ class ProductUtil extends Util
                     ->where('p.business_id', $business_id)
                     ->where('variations.id', $variation_id)
                     ->select(
-                        DB::raw("SUM(IF(t.type='purchase' AND t.status='received', pl.quantity, 0)) as total_purchase"),
-                        DB::raw("SUM(IF(t.type='purchase' OR t.type='purchase_return', pl.quantity_returned, 0)) as total_purchase_return"),
+                        DB::raw("SUM(IF(t.type='purchase' AND t.status='received', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_purchase"),
+                        DB::raw("SUM(IF(t.type='purchase' OR t.type='purchase_return', pl.quantity_returned + IFNULL(pl.bonus_quantity_returned, 0), 0)) as total_purchase_return"),
                         DB::raw('SUM(pl.quantity_adjusted) as total_adjusted'),
-                        DB::raw("SUM(IF(t.type='opening_stock', pl.quantity, 0)) as total_opening_stock"),
-                        DB::raw("SUM(IF(t.type='purchase_transfer', pl.quantity, 0)) as total_purchase_transfer"),
+                        DB::raw("SUM(IF(t.type='opening_stock', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_opening_stock"),
+                        DB::raw("SUM(IF(t.type='purchase_transfer', pl.quantity + IFNULL(pl.bonus_quantity, 0), 0)) as total_purchase_transfer"),
                         'variations.sub_sku as sub_sku',
                         'p.name as product',
                         'p.type',
@@ -2066,11 +2101,15 @@ class ProductUtil extends Util
                                     'transactions.id as transaction_id',
                                     'transactions.type as transaction_type',
                                     'sl.quantity as sell_line_quantity',
+                                    'sl.bonus_quantity as sell_line_bonus_quantity',
                                     'pl.quantity as purchase_line_quantity',
+                                    'pl.bonus_quantity as purchase_line_bonus_quantity',
                                     'rsl.quantity_returned as sell_return',
                                     'rpl.quantity_returned as purchase_return',
+                                    'rpl.bonus_quantity_returned as purchase_return_bonus',
                                     'al.quantity as stock_adjusted',
                                     'pl.quantity_returned as combined_purchase_return',
+                                    'pl.bonus_quantity_returned as combined_purchase_return_bonus',
                                     'transactions.return_parent_id',
                                     'transactions.transaction_date',
                                     'transactions.status',
@@ -2099,12 +2138,14 @@ class ProductUtil extends Util
                 if ($stock_line->status != 'final') {
                     continue;
                 }
-                $quantity_change = -1 * $stock_line->sell_line_quantity;
+                $bonus_qty = !empty($stock_line->sell_line_bonus_quantity) ? $stock_line->sell_line_bonus_quantity : 0;
+                $quantity_change = -1 * ($stock_line->sell_line_quantity + $bonus_qty);
                 $stock += $quantity_change;
 
                 $stock_in_second_unit -= $stock_line->sell_secondary_unit_quantity;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'sell',
                     'type_label' => __('sale.sale'),
@@ -2116,11 +2157,13 @@ class ProductUtil extends Util
                 if ($stock_line->status != 'received') {
                     continue;
                 }
-                $quantity_change = $stock_line->purchase_line_quantity;
+                $bonus_qty = !empty($stock_line->purchase_line_bonus_quantity) ? $stock_line->purchase_line_bonus_quantity : 0;
+                $quantity_change = $stock_line->purchase_line_quantity + $bonus_qty;
                 $stock += $quantity_change;
                 $stock_in_second_unit += $stock_line->purchase_secondary_unit_quantity;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'purchase',
                     'type_label' => __('lang_v1.purchase'),
@@ -2140,11 +2183,13 @@ class ProductUtil extends Util
                     'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
                 ]);
             } elseif ($stock_line->transaction_type == 'opening_stock') {
-                $quantity_change = $stock_line->purchase_line_quantity;
+                $bonus_qty = !empty($stock_line->purchase_line_bonus_quantity) ? $stock_line->purchase_line_bonus_quantity : 0;
+                $quantity_change = $stock_line->purchase_line_quantity + $bonus_qty;
                 $stock += $quantity_change;
                 $stock_in_second_unit += $stock_line->purchase_secondary_unit_quantity;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'opening_stock',
                     'type_label' => __('report.opening_stock'),
@@ -2172,10 +2217,12 @@ class ProductUtil extends Util
                     continue;
                 }
 
-                $quantity_change = $stock_line->purchase_line_quantity;
+                $bonus_qty = !empty($stock_line->purchase_line_bonus_quantity) ? $stock_line->purchase_line_bonus_quantity : 0;
+                $quantity_change = $stock_line->purchase_line_quantity + $bonus_qty;
                 $stock += $quantity_change;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'purchase_transfer',
                     'type_label' => __('lang_v1.stock_transfers').' ('.__('lang_v1.in').')',
@@ -2197,10 +2244,12 @@ class ProductUtil extends Util
                     'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
                 ]);
             } elseif ($stock_line->transaction_type == 'production_purchase') {
-                $quantity_change = $stock_line->purchase_line_quantity;
+                $bonus_qty = !empty($stock_line->purchase_line_bonus_quantity) ? $stock_line->purchase_line_bonus_quantity : 0;
+                $quantity_change = $stock_line->purchase_line_quantity + $bonus_qty;
                 $stock += $quantity_change;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_qty,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'production_purchase',
                     'type_label' => __('manufacturing::lang.manufactured'),
@@ -2208,10 +2257,22 @@ class ProductUtil extends Util
                     'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
                 ]);
             } elseif ($stock_line->transaction_type == 'purchase_return') {
-                $quantity_change = -1 * ($stock_line->combined_purchase_return + $stock_line->purchase_return);
+                // For purchase_return: if has return_parent_id, use rpl (parent purchase lines)
+                // If no return_parent_id (combined return), use pl (purchase return transaction lines)
+                if (!empty($stock_line->return_parent_id)) {
+                    // Regular purchase return - bonus quantity is on parent purchase line
+                    $bonus_return = !empty($stock_line->purchase_return_bonus) ? $stock_line->purchase_return_bonus : 0;
+                    $quantity_change = -1 * ($stock_line->purchase_return + $bonus_return);
+                } else {
+                    // Combined purchase return - bonus quantity is on purchase return transaction line
+                    $combined_bonus_return = !empty($stock_line->combined_purchase_return_bonus) ? $stock_line->combined_purchase_return_bonus : 0;
+                    $quantity_change = -1 * ($stock_line->combined_purchase_return + $combined_bonus_return);
+                    $bonus_return = $combined_bonus_return;
+                }
                 $stock += $quantity_change;
                 $stock_history_array[] = array_merge($temp_array, [
                     'quantity_change' => $quantity_change,
+                    'bonus_quantity' => $bonus_return,
                     'stock' => $this->roundQuantity($stock),
                     'type' => 'purchase_return',
                     'type_label' => __('lang_v1.purchase_return'),
@@ -2277,11 +2338,11 @@ class ProductUtil extends Util
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.status='received' AND transactions.type='purchase' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_purchased"),
-            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0)) FROM transactions 
+            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0) + COALESCE(PL.bonus_quantity_returned, 0)) FROM transactions 
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.status='received' AND transactions.type='purchase' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_purchase_return"),
-            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0)) FROM transactions 
+            DB::raw("(SELECT SUM(COALESCE(PL.quantity_returned, 0) + COALESCE(PL.bonus_quantity_returned, 0)) FROM transactions 
                     LEFT JOIN purchase_lines AS PL ON transactions.id=PL.transaction_id
                     WHERE transactions.type='purchase_return' AND transactions.location_id=$location_id
                     AND PL.variation_id=variations.id) as total_combined_purchase_return"),

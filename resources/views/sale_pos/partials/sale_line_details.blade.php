@@ -78,6 +78,22 @@
                     @endif
                     {{$sell_line->product->second_unit->short_name}}
                 @endif
+
+                @if(!empty($sell_line->bonus_quantity) && $sell_line->bonus_quantity > 0)
+                    <br>
+                    <small class="text-info">
+                        <strong>@lang('lang_v1.bonus_qty'):</strong>
+                        <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $sell_line->bonus_quantity }}</span>
+                        @if(!empty($sell_line->sub_unit)) {{$sell_line->sub_unit->short_name}} @else {{$sell_line->product->unit->short_name}} @endif
+                        <span class="label label-info">FREE</span>
+                    </small>
+                    <br>
+                    <small class="text-muted">
+                        <strong>@lang('lang_v1.total_sold'):</strong>
+                        <span class="display_currency" data-is_quantity="true" data-currency_symbol="false">{{ $sell_line->quantity + $sell_line->bonus_quantity }}</span>
+                        @if(!empty($sell_line->sub_unit)) {{$sell_line->sub_unit->short_name}} @else {{$sell_line->product->unit->short_name}} @endif
+                    </small>
+                @endif
             </td>
             @if(!empty($pos_settings['inline_service_staff']))
                 <td>

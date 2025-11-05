@@ -103,9 +103,15 @@
 					<td>{{$history['type_label']}}</td>
 					@if($history['quantity_change'] > 0 )
 						<td class="text-success"> +<span class="display_currency" data-is_quantity="true">{{$history['quantity_change']}}</span>
+						@if(!empty($history['bonus_quantity']) && $history['bonus_quantity'] > 0 && in_array($history['type'], ['purchase', 'opening_stock', 'purchase_transfer', 'production_purchase']))
+							<br><small class="text-info">(Bonus: +<span class="display_currency" data-is_quantity="true">{{$history['bonus_quantity']}}</span>)</small>
+						@endif
 						</td>
 					@else
 						<td class="text-danger"><span class="display_currency text-danger" data-is_quantity="true">{{$history['quantity_change']}}</span>
+						@if(!empty($history['bonus_quantity']) && $history['bonus_quantity'] > 0 && in_array($history['type'], ['sell', 'purchase_return']))
+							<br><small class="text-info">(Bonus: <span class="display_currency" data-is_quantity="true">-{{$history['bonus_quantity']}}</span>)</small>
+						@endif
 						</td>
 					@endif
 

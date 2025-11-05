@@ -212,9 +212,17 @@ class PurchaseReturnController extends Controller
         }
 
         foreach ($purchase->purchase_lines as $key => $value) {
-            $qty_available = $value->quantity - $value->quantity_sold - $value->quantity_adjusted;
+            $qty_available = $value->quantity - $value->quantity_sold - $value->quantity_adjusted - $value->quantity_returned;
 
             $purchase->purchase_lines[$key]->formatted_qty_available = $this->transactionUtil->num_f($qty_available);
+            
+            // Format bonus quantity available for display in view
+            $bonus_qty = $value->bonus_quantity ?? 0;
+            $bonus_qty_returned = $value->bonus_quantity_returned ?? 0;
+            $bonus_qty_available = $bonus_qty - $bonus_qty_returned;
+            $purchase->purchase_lines[$key]->formatted_bonus_qty_available = $this->transactionUtil->num_f($bonus_qty_available, false, null, true);
+            $purchase->purchase_lines[$key]->formatted_bonus_qty_total = $this->transactionUtil->num_f($bonus_qty, false, null, true);
+            $purchase->purchase_lines[$key]->bonus_qty_available = $bonus_qty_available;
         }
 
         return view('purchase_return.add')
@@ -246,20 +254,29 @@ class PurchaseReturnController extends Controller
 
             DB::beginTransaction();
 
+            $bonus_return_quantities = $request->input('bonus_returns', []);
+
             foreach ($purchase->purchase_lines as $purchase_line) {
                 $old_return_qty = $purchase_line->quantity_returned;
+                $old_bonus_return_qty = $purchase_line->bonus_quantity_returned ?? 0;
 
                 $return_quantity = ! empty($return_quantities[$purchase_line->id]) ? $this->productUtil->num_uf($return_quantities[$purchase_line->id]) : 0;
+                
+                // Handle bonus quantity return
+                $bonus_return_quantity = ! empty($bonus_return_quantities[$purchase_line->id]) ? $this->productUtil->num_uf($bonus_return_quantities[$purchase_line->id]) : 0;
 
                 $multiplier = 1;
                 if (! empty($purchase_line->sub_unit->base_unit_multiplier)) {
                     $multiplier = $purchase_line->sub_unit->base_unit_multiplier;
                     $return_quantity = $return_quantity * $multiplier;
+                    $bonus_return_quantity = $bonus_return_quantity * $multiplier;
                 }
 
                 $purchase_line->quantity_returned = $return_quantity;
+                $purchase_line->bonus_quantity_returned = $bonus_return_quantity;
                 $purchase_line->save();
                 $return_total += $purchase_line->purchase_price_inc_tax * $purchase_line->quantity_returned;
+                // Bonus quantity returns don't affect total (they were free)
 
                 //Decrease quantity in variation location details
                 if ($old_return_qty != $purchase_line->quantity_returned) {
@@ -270,6 +287,31 @@ class PurchaseReturnController extends Controller
                         $purchase_line->quantity_returned,
                         $old_return_qty
                     );
+                }
+                
+                //Decrease stock for bonus quantity return
+                if ($old_bonus_return_qty != $bonus_return_quantity) {
+                    $bonus_diff = $bonus_return_quantity - $old_bonus_return_qty;
+                    if ($bonus_diff > 0) {
+                        // Bonus quantity is being returned, decrease stock
+                        $this->productUtil->decreaseProductQuantity(
+                            $purchase_line->product_id,
+                            $purchase_line->variation_id,
+                            $purchase->location_id,
+                            $bonus_diff
+                        );
+                    } elseif ($bonus_diff < 0) {
+                        // Bonus return was reduced, increase stock back
+                        $this->productUtil->updateProductQuantity(
+                            $purchase->location_id,
+                            $purchase_line->product_id,
+                            $purchase_line->variation_id,
+                            abs($bonus_diff),
+                            0,
+                            null,
+                            false
+                        );
+                    }
                 }
             }
             $return_total_inc_tax = $return_total + $request->input('tax_amount');
@@ -348,9 +390,16 @@ class PurchaseReturnController extends Controller
         $business_id = request()->session()->get('user.business_id');
 
         $purchase = Transaction::where('business_id', $business_id)
-                        ->with(['return_parent', 'return_parent.tax', 'purchase_lines', 'contact', 'tax', 'purchase_lines.sub_unit', 'purchase_lines.product', 'purchase_lines.product.unit'])
+                        ->with(['return_parent', 'return_parent.tax', 'return_parent.purchase_lines', 'purchase_lines', 'contact', 'tax', 'purchase_lines.sub_unit', 'purchase_lines.product', 'purchase_lines.product.unit', 'return_parent.purchase_lines.sub_unit', 'return_parent.purchase_lines.product', 'return_parent.purchase_lines.product.unit'])
                         ->find($id);
-
+        
+        // For regular purchase returns (with return_parent_id), use parent purchase lines
+        // For combined purchase returns, use the return transaction's purchase lines
+        if (!empty($purchase->return_parent_id) && !empty($purchase->return_parent)) {
+            $purchase->purchase_lines = $purchase->return_parent->purchase_lines;
+        }
+        
+        // Format sub-units for purchase lines
         foreach ($purchase->purchase_lines as $key => $value) {
             if (! empty($value->sub_unit_id)) {
                 $formated_purchase_line = $this->productUtil->changePurchaseLineUnit($value, $business_id);
@@ -415,6 +464,10 @@ class PurchaseReturnController extends Controller
                     foreach ($delete_purchase_lines as $purchase_line) {
                         $delete_purchase_line_ids[] = $purchase_line->id;
                         $this->productUtil->updateProductQuantity($purchase_return->location_id, $purchase_line->product_id, $purchase_line->variation_id, $purchase_line->quantity_returned, 0, null, false);
+                        // Restore bonus quantity if any was returned
+                        if (!empty($purchase_line->bonus_quantity_returned) && $purchase_line->bonus_quantity_returned > 0) {
+                            $this->productUtil->updateProductQuantity($purchase_return->location_id, $purchase_line->product_id, $purchase_line->variation_id, $purchase_line->bonus_quantity_returned, 0, null, false);
+                        }
                     }
                     PurchaseLine::where('transaction_id', $purchase_return->id)
                                 ->whereIn('id', $delete_purchase_line_ids)
@@ -428,8 +481,14 @@ class PurchaseReturnController extends Controller
 
                     $updated_purchase_lines = $parent_purchase->purchase_lines;
                     foreach ($updated_purchase_lines as $purchase_line) {
+                        // Restore regular quantity
                         $this->productUtil->updateProductQuantity($parent_purchase->location_id, $purchase_line->product_id, $purchase_line->variation_id, $purchase_line->quantity_returned, 0, null, false);
+                        // Restore bonus quantity if any was returned
+                        if (!empty($purchase_line->bonus_quantity_returned) && $purchase_line->bonus_quantity_returned > 0) {
+                            $this->productUtil->updateProductQuantity($parent_purchase->location_id, $purchase_line->product_id, $purchase_line->variation_id, $purchase_line->bonus_quantity_returned, 0, null, false);
+                        }
                         $purchase_line->quantity_returned = 0;
+                        $purchase_line->bonus_quantity_returned = 0;
                         $purchase_line->save();
                     }
                 }

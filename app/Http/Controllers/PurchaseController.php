@@ -404,9 +404,62 @@ class PurchaseController extends Controller
             //Add Purchase payments
             $this->transactionUtil->createOrUpdatePaymentLines($transaction, $request->input('payment'));
 
+            // Decrease contact balance when purchase is created (if balance exists) and create payment record
+            // Balance represents credit available, should decrease when purchase is made
+            $contact = Contact::find($transaction->contact_id);
+            if ($contact && $contact->balance > 0) {
+                // Get remaining due after regular payments
+                $paid_amount = $this->transactionUtil->getTotalPaid($transaction->id);
+                $remaining_due = $transaction->final_total - $paid_amount;
+                
+                // Apply available balance to remaining due (if any)
+                $balance_to_use = min($contact->balance, max(0, $remaining_due));
+                if ($balance_to_use > 0) {
+                    // Get cash account from payment method mapping
+                    $account_id = null;
+                    $business = \App\Business::find($business_id);
+                    if ($business && !empty($business->payment_method_account_mapping)) {
+                        $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                            ? $business->payment_method_account_mapping 
+                            : json_decode($business->payment_method_account_mapping, true);
+                        if (!empty($payment_method_account_mapping['cash'])) {
+                            $account_id = $payment_method_account_mapping['cash'];
+                        }
+                    }
+                    
+                    // Create payment record for balance used
+                    $ref_count = $this->productUtil->setAndGetReferenceCount('purchase_payment');
+                    $payment_ref_no = $this->productUtil->generateReferenceNumber('purchase_payment', $ref_count);
+                    
+                    $balance_payment = \App\TransactionPayment::create([
+                        'transaction_id' => $transaction->id,
+                        'amount' => $balance_to_use,
+                        'method' => 'cash', // Using cash method for balance payments
+                        'business_id' => $business_id,
+                        'is_return' => 0,
+                        'paid_on' => $transaction->transaction_date,
+                        'created_by' => auth()->user()->id,
+                        'payment_for' => $transaction->contact_id,
+                        'payment_ref_no' => $payment_ref_no,
+                        'account_id' => $account_id,
+                        'note' => __('lang_v1.paid_from_balance'),
+                    ]);
+                    
+                    // Fire event for account transaction if needed
+                    $formInput = [
+                        'transaction_type' => 'purchase',
+                        'amount' => $balance_to_use,
+                        'account_id' => $account_id,
+                    ];
+                    event(new \App\Events\TransactionPaymentAdded($balance_payment, $formInput));
+                    
+                    // Decrease balance
+                    $this->transactionUtil->updateContactBalance($contact, $balance_to_use, 'deduct');
+                }
+            }
+            
             //update payment status
             $payment_status = $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
-
             $transaction->payment_status = $payment_status;
 
             if (! empty($transaction->purchase_order_ids)) {
@@ -727,6 +780,7 @@ class PurchaseController extends Controller
             DB::beginTransaction();
 
             //update transaction
+            $old_final_total = $transaction->final_total;
             $transaction->update($update_data);
 
             //Update transaction payment status
@@ -736,6 +790,67 @@ class PurchaseController extends Controller
             $purchases = $request->input('purchases');
 
             $delete_purchase_lines = $this->productUtil->createOrUpdatePurchaseLines($transaction, $purchases, $currency_details, $enable_product_editing, $before_status);
+            
+            // Adjust contact balance when purchase amount changes
+            // Balance represents credit available, should decrease when purchase amount increases
+            $contact = Contact::find($transaction->contact_id);
+            if ($contact && $contact->balance > 0) {
+                $new_final_total = $transaction->final_total;
+                $amount_increase = $new_final_total - $old_final_total;
+                
+                // If purchase amount increased, decrease balance by the difference (up to available balance) and create payment
+                if ($amount_increase > 0) {
+                    $balance_to_use = min($contact->balance, $amount_increase);
+                    if ($balance_to_use > 0) {
+                        // Get cash account from payment method mapping
+                        $account_id = null;
+                        $business = \App\Business::find($business_id);
+                        if ($business && !empty($business->payment_method_account_mapping)) {
+                            $payment_method_account_mapping = is_array($business->payment_method_account_mapping) 
+                                ? $business->payment_method_account_mapping 
+                                : json_decode($business->payment_method_account_mapping, true);
+                            if (!empty($payment_method_account_mapping['cash'])) {
+                                $account_id = $payment_method_account_mapping['cash'];
+                            }
+                        }
+                        
+                        // Create payment record for balance used
+                        $ref_count = $this->productUtil->setAndGetReferenceCount('purchase_payment');
+                        $payment_ref_no = $this->productUtil->generateReferenceNumber('purchase_payment', $ref_count);
+                        
+                        $balance_payment = \App\TransactionPayment::create([
+                            'transaction_id' => $transaction->id,
+                            'amount' => $balance_to_use,
+                            'method' => 'cash',
+                            'business_id' => $business_id,
+                            'is_return' => 0,
+                            'paid_on' => $transaction->transaction_date,
+                            'created_by' => auth()->user()->id,
+                            'payment_for' => $transaction->contact_id,
+                            'payment_ref_no' => $payment_ref_no,
+                            'account_id' => $account_id,
+                            'note' => __('lang_v1.paid_from_balance'),
+                        ]);
+                        
+                        // Fire event for account transaction
+                        $formInput = [
+                            'transaction_type' => 'purchase',
+                            'amount' => $balance_to_use,
+                            'account_id' => $account_id,
+                        ];
+                        event(new \App\Events\TransactionPaymentAdded($balance_payment, $formInput));
+                        
+                        // Decrease balance
+                        $this->transactionUtil->updateContactBalance($contact, $balance_to_use, 'deduct');
+                        
+                        // Recalculate payment status after adding balance payment
+                        $payment_status = $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
+                        $transaction->payment_status = $payment_status;
+                    }
+                }
+                // Note: If amount decreased, we don't increase balance back 
+                // as that amount might have been paid separately
+            }
 
             //Update mapping of purchase & Sell.
             $this->transactionUtil->adjustMappingPurchaseSellAfterEditingPurchase($before_status, $transaction, $delete_purchase_lines);

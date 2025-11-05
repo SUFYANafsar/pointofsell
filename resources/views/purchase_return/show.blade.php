@@ -51,6 +51,7 @@
                   <th>@lang('product.product_name')</th>
                   <th>@lang('sale.unit_price')</th>
                   <th>@lang('lang_v1.return_quantity')</th>
+                  <th>@lang('lang_v1.bonus_qty')</th>
                   <th>@lang('lang_v1.return_subtotal')</th>
               </tr>
           </thead>
@@ -59,7 +60,10 @@
                 $total_before_tax = 0;
               @endphp
               @foreach($purchase->purchase_lines as $purchase_line)
-              @if($purchase_line->quantity_returned == 0)
+              @php
+                $bonus_qty_returned = $purchase_line->bonus_quantity_returned ?? 0;
+              @endphp
+              @if($purchase_line->quantity_returned == 0 && $bonus_qty_returned == 0)
                 @continue
               @endif
 
@@ -79,7 +83,20 @@
                     @endif
                   </td>
                   <td><span class="display_currency" data-currency_symbol="true">{{ $purchase_line->purchase_price_inc_tax }}</span></td>
-                  <td>{{@format_quantity($purchase_line->quantity_returned)}} {{$unit_name}}</td>
+                  <td>
+                    @if($purchase_line->quantity_returned > 0)
+                      {{@format_quantity($purchase_line->quantity_returned)}} {{$unit_name}}
+                    @else
+                      <span class="text-muted">-</span>
+                    @endif
+                  </td>
+                  <td>
+                    @if($bonus_qty_returned > 0)
+                      <span class="text-info">{{@format_quantity($bonus_qty_returned)}} {{$unit_name}} <span class="label label-info">FREE</span></span>
+                    @else
+                      <span class="text-muted">-</span>
+                    @endif
+                  </td>
                   <td>
                     @php
                       $line_total = $purchase_line->purchase_price_inc_tax * $purchase_line->quantity_returned;

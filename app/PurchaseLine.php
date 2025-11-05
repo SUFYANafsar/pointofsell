@@ -40,6 +40,28 @@ class PurchaseLine extends Model
     }
 
     /**
+     * Get the bonus quantity column.
+     *
+     * @param  string  $value
+     * @return float $value
+     */
+    public function getBonusQuantityAttribute($value)
+    {
+        return (float) ($value ?? 0);
+    }
+
+    /**
+     * Get the bonus quantity returned column.
+     *
+     * @param  string  $value
+     * @return float $value
+     */
+    public function getBonusQuantityReturnedAttribute($value)
+    {
+        return (float) ($value ?? 0);
+    }
+
+    /**
      * Get the unit associated with the purchase line.
      */
     public function sub_unit()

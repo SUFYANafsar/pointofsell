@@ -410,6 +410,9 @@
 	                        	<div style="display:flex; width: 100%;">
 	                        		<p class="text-left width-60 quantity m-0 bw" style="direction: ltr;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 	                        			{{$line['quantity']}} 
+	                        			@if(!empty($line['bonus_quantity']) && $line['bonus_quantity'] > 0)
+	                        			<br><small class="text-info">@lang('lang_v1.bonus_qty'): {{$line['bonus_quantity']}} {{$line['units']}} <span class="label label-info">FREE</span></small>
+	                        			@endif
 	                        			@if(empty($receipt_details->hide_price))
 	                        			x {{$line['unit_price_before_discount']}}
 	                        			

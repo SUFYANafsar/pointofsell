@@ -50,6 +50,17 @@ class TransactionSellLine extends Model
         return (float) $value;
     }
 
+    /**
+     * Get the bonus_quantity column.
+     *
+     * @param  string  $value
+     * @return float $value
+     */
+    public function getBonusQuantityAttribute($value)
+    {
+        return (float) ($value ?? 0);
+    }
+
     public function lot_details()
     {
         return $this->belongsTo(\App\PurchaseLine::class, 'lot_no_line_id');

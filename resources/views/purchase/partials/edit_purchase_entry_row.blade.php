@@ -92,6 +92,18 @@
                     data-msg-max-value="{{__('lang_v1.max_quantity_quantity_allowed', ['quantity' => $max_quantity])}}" 
                 @endif
                 >
+                
+                <br>
+                <small class="text-muted">@lang('lang_v1.bonus_qty'):</small>
+                <input type="text" 
+                name="purchases[{{$loop->index}}][bonus_quantity]" 
+                value="{{@format_quantity($purchase_line->bonus_quantity ?? 0)}}"
+                class="form-control input-sm purchase_bonus_quantity input_number"
+                data-rule-abs_digit={{$check_decimal}}
+                data-msg-abs_digit="{{__('lang_v1.decimal_value_not_allowed')}}"
+                style="border-color: #5bc0de; background-color: #e7f3ff;"
+                placeholder="0"
+                >
 
                 <input type="hidden" class="base_unit_cost" value="{{$purchase_line->variations->default_purchase_price}}">
                 @if(!empty($purchase_line->sub_units_options))

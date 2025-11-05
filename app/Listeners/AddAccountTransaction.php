@@ -34,10 +34,8 @@ class AddAccountTransaction
     public function handle(TransactionPaymentAdded $event)
     {
         //echo "<pre>";print_r($event->transactionPayment->toArray());exit;
-        if ($event->transactionPayment->method == 'advance') {
-            $this->transactionUtil->updateContactBalance($event->transactionPayment->payment_for, $event->transactionPayment->amount, 'deduct');
-        }
-
+        // Advance payment logic removed - no longer using advance payment method
+        
         if (! $this->moduleUtil->isModuleEnabled('account', $event->transactionPayment->business_id)) {
             return true;
         }

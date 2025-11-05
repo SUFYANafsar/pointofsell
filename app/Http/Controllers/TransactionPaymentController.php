@@ -131,13 +131,7 @@ class TransactionPaymentController extends Controller
                 $inputs['business_id'] = $request->session()->get('business.id');
                 $inputs['document'] = $this->transactionUtil->uploadFile($request, 'document', 'documents');
 
-                //Pay from advance balance
-                $payment_amount = $inputs['amount'];
-                $contact_balance = ! empty($transaction->contact) ? $transaction->contact->balance : 0;
-                if ($inputs['method'] == 'advance' && $inputs['amount'] > $contact_balance) {
-                    throw new AdvanceBalanceNotAvailable(__('lang_v1.required_advance_balance_not_available'));
-                }
-
+                // Advance payment validation removed - no longer using advance payment method
                 if (! empty($inputs['amount'])) {
                     $tp = TransactionPayment::create($inputs);
 

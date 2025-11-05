@@ -366,10 +366,18 @@ class TransactionUtil extends Util
                     }
                 }
 
+                // Get bonus quantity
+                $bonus_quantity = 0;
+                if (!empty($product['bonus_quantity'])) {
+                    $bonus_quantity = $uf_data ? $this->num_uf($product['bonus_quantity']) : $product['bonus_quantity'];
+                    $bonus_quantity = $bonus_quantity * $multiplier;
+                }
+
                 $line = [
                     'product_id' => $product['product_id'],
                     'variation_id' => $product['variation_id'],
                     'quantity' => $uf_quantity * $multiplier,
+                    'bonus_quantity' => $bonus_quantity,
                     'unit_price_before_discount' => $unit_price_before_discount,
                     'unit_price' => $unit_price,
                     'line_discount_type' => ! empty($product['line_discount_type']) ? $product['line_discount_type'] : null,
@@ -588,10 +596,18 @@ class TransactionUtil extends Util
             }
         }
 
+        // Get bonus quantity for edit
+        $bonus_quantity = 0;
+        if (!empty($product['bonus_quantity'])) {
+            $bonus_quantity = $uf_data ? $this->num_uf($product['bonus_quantity']) : $product['bonus_quantity'];
+            $bonus_quantity = $bonus_quantity * $multiplier;
+        }
+
         //Update sell lines.
         $sell_line->fill(['product_id' => $product['product_id'],
             'variation_id' => $product['variation_id'],
             'quantity' => $uf_data ? $this->num_uf($product['quantity']) * $multiplier : $product['quantity'] * $multiplier,
+            'bonus_quantity' => $bonus_quantity,
             'unit_price_before_discount' => $unit_price_before_discount,
             'unit_price' => $unit_price,
             'line_discount_type' => ! empty($product['line_discount_type']) ? $product['line_discount_type'] : null,
@@ -727,9 +743,7 @@ class TransactionUtil extends Util
                 $this->editPaymentLine($payment, $transaction, $uf_data);
             } else {
                 $payment_amount = $uf_data ? $this->num_uf($payment['amount']) : $payment['amount'];
-                if ($payment['method'] == 'advance' && $payment_amount > $contact_balance) {
-                    throw new AdvanceBalanceNotAvailable(__('lang_v1.required_advance_balance_not_available'));
-                }
+                // Advance payment validation removed - no longer using advance payment method
                 //If amount is 0 then skip.
                 if ($payment_amount != 0) {
                     $prefix_type = 'sell_payment';
@@ -2088,6 +2102,8 @@ class TransactionUtil extends Util
                 //Field for 2nd column
                 'quantity' => $this->num_f($line->quantity, false, $business_details, true),
                 'quantity_uf' => $line->quantity,
+                'bonus_quantity' => $this->num_f($line->bonus_quantity ?? 0, false, $business_details, true),
+                'bonus_quantity_uf' => $line->bonus_quantity ?? 0,
                 'units' => $unit_name,
 
                 'base_unit_name' => $base_unit_name,
@@ -3337,7 +3353,7 @@ class TransactionUtil extends Util
                 ->whereIn('transactions.type', ['purchase', 'purchase_transfer',
                     'opening_stock', 'production_purchase', ])
                 ->where('transactions.status', 'received')
-                ->whereRaw("( $qty_sum_query ) < PL.quantity")
+                ->whereRaw("( $qty_sum_query ) < (PL.quantity + COALESCE(PL.bonus_quantity, 0))")
                 ->where('PL.product_id', $line->product_id)
                 ->where('PL.variation_id', $line->variation_id);
 
@@ -3370,7 +3386,7 @@ class TransactionUtil extends Util
 
             $rows = $query->select(
                 'PL.id as purchase_lines_id',
-                DB::raw("(PL.quantity - ( $qty_sum_query )) AS quantity_available"),
+                DB::raw("((PL.quantity + COALESCE(PL.bonus_quantity, 0)) - ( $qty_sum_query )) AS quantity_available"),
                 'PL.quantity_sold as quantity_sold',
                 'PL.quantity_adjusted as quantity_adjusted',
                 'PL.quantity_returned as quantity_returned',
@@ -3381,7 +3397,8 @@ class TransactionUtil extends Util
             $purchase_sell_map = [];
 
             //Iterate over the rows, assign the purchase line to sell lines.
-            $qty_selling = $line->quantity;
+            // Include bonus_quantity in sell quantity since it also reduces stock
+            $qty_selling = $line->quantity + ($line->bonus_quantity ?? 0);
             foreach ($rows as $k => $row) {
                 $qty_allocated = 0;
 

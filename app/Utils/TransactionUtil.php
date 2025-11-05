@@ -3353,7 +3353,7 @@ class TransactionUtil extends Util
                 ->whereIn('transactions.type', ['purchase', 'purchase_transfer',
                     'opening_stock', 'production_purchase', ])
                 ->where('transactions.status', 'received')
-                ->whereRaw("( $qty_sum_query ) < PL.quantity")
+                ->whereRaw("( $qty_sum_query ) < (PL.quantity + COALESCE(PL.bonus_quantity, 0))")
                 ->where('PL.product_id', $line->product_id)
                 ->where('PL.variation_id', $line->variation_id);
 
@@ -3386,7 +3386,7 @@ class TransactionUtil extends Util
 
             $rows = $query->select(
                 'PL.id as purchase_lines_id',
-                DB::raw("(PL.quantity - ( $qty_sum_query )) AS quantity_available"),
+                DB::raw("((PL.quantity + COALESCE(PL.bonus_quantity, 0)) - ( $qty_sum_query )) AS quantity_available"),
                 'PL.quantity_sold as quantity_sold',
                 'PL.quantity_adjusted as quantity_adjusted',
                 'PL.quantity_returned as quantity_returned',
@@ -3397,7 +3397,8 @@ class TransactionUtil extends Util
             $purchase_sell_map = [];
 
             //Iterate over the rows, assign the purchase line to sell lines.
-            $qty_selling = $line->quantity;
+            // Include bonus_quantity in sell quantity since it also reduces stock
+            $qty_selling = $line->quantity + ($line->bonus_quantity ?? 0);
             foreach ($rows as $k => $row) {
                 $qty_allocated = 0;
 

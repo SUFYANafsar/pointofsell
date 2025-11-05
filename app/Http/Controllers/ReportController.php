@@ -2341,6 +2341,7 @@ class ReportController extends Controller
             $supplier_id = $request->get('supplier_id', null);
             $contact_filter1 = ! empty($supplier_id) ? "AND t.contact_id=$supplier_id" : '';
             $contact_filter2 = ! empty($supplier_id) ? "AND transactions.contact_id=$supplier_id" : '';
+            $contact_filter3 = ! empty($supplier_id) ? "AND transaction_payments.payment_for=$supplier_id" : '';
 
             $location_id = $request->get('location_id', null);
 
@@ -2351,19 +2352,27 @@ class ReportController extends Controller
                     ->where('t.business_id', $business_id)
                     ->whereIn('t.type', ['purchase', 'opening_balance']);
             })
+                ->leftjoin('contacts as c', function ($join) use ($business_id) {
+                    $join->on('transaction_payments.payment_for', '=', 'c.id')
+                        ->where('c.business_id', $business_id);
+                })
                 ->where('transaction_payments.business_id', $business_id)
-                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $parent_payment_query_part) {
+                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $contact_filter3, $parent_payment_query_part) {
                     $q->whereRaw("(transaction_payments.transaction_id IS NOT NULL AND t.type IN ('purchase', 'opening_balance')  $parent_payment_query_part $contact_filter1)")
-                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('purchase', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)");
+                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('purchase', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)")
+                        ->orWhereRaw("(transaction_payments.transaction_id IS NULL AND transaction_payments.payment_for IS NOT NULL AND c.type IN ('supplier', 'both') AND (transaction_payments.payment_type = 'debit' OR transaction_payments.is_advance = 1) $parent_payment_query_part $contact_filter3)");
                 })
 
                 ->select(
                     DB::raw("IF(transaction_payments.transaction_id IS NULL, 
-                                (SELECT c.name FROM transactions as ts
-                                JOIN contacts as c ON ts.contact_id=c.id 
-                                WHERE ts.id=(
-                                        SELECT tps.transaction_id FROM transaction_payments as tps
-                                        WHERE tps.parent_id=transaction_payments.id LIMIT 1
+                                IF(transaction_payments.payment_for IS NOT NULL,
+                                    (SELECT CONCAT(COALESCE(c.supplier_business_name, ''), '<br>', c.name) FROM contacts as c WHERE c.id=transaction_payments.payment_for),
+                                    (SELECT c.name FROM transactions as ts
+                                    JOIN contacts as c ON ts.contact_id=c.id 
+                                    WHERE ts.id=(
+                                            SELECT tps.transaction_id FROM transaction_payments as tps
+                                            WHERE tps.parent_id=transaction_payments.id LIMIT 1
+                                        )
                                     )
                                 ),
                                 (SELECT CONCAT(COALESCE(c.supplier_business_name, ''), '<br>', c.name) FROM transactions as ts JOIN
@@ -2394,11 +2403,17 @@ class ReportController extends Controller
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
-                $query->whereIn('t.location_id', $permitted_locations);
+                $query->where(function ($q) use ($permitted_locations) {
+                    $q->whereIn('t.location_id', $permitted_locations)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($location_id)) {
-                $query->where('t.location_id', $location_id);
+                $query->where(function ($q) use ($location_id) {
+                    $q->where('t.location_id', $location_id)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
@@ -2465,6 +2480,7 @@ class ReportController extends Controller
             $customer_id = $request->get('supplier_id', null);
             $contact_filter1 = ! empty($customer_id) ? "AND t.contact_id=$customer_id" : '';
             $contact_filter2 = ! empty($customer_id) ? "AND transactions.contact_id=$customer_id" : '';
+            $contact_filter3 = ! empty($customer_id) ? "AND transaction_payments.payment_for=$customer_id" : '';
 
             $location_id = $request->get('location_id', null);
             $parent_payment_query_part = empty($location_id) ? 'AND transaction_payments.parent_id IS NULL' : '';
@@ -2476,6 +2492,10 @@ class ReportController extends Controller
             })
                 ->leftjoin('contacts as c', 't.contact_id', '=', 'c.id')
                 ->leftjoin('customer_groups AS CG', 'c.customer_group_id', '=', 'CG.id')
+                ->leftjoin('contacts as c_payment_for', function ($join) use ($business_id) {
+                    $join->on('transaction_payments.payment_for', '=', 'c_payment_for.id')
+                        ->where('c_payment_for.business_id', $business_id);
+                })
 
             
             //     DB::raw("IF(transaction_payments.transaction_id IS NULL, 
@@ -2497,15 +2517,18 @@ class ReportController extends Controller
                     SELECT 
                         tp.id as payment_id, 
                         IF(tp.transaction_id IS NULL, 
-                            (SELECT c.name 
-                             FROM transactions as ts
-                             JOIN contacts as c ON ts.contact_id = c.id 
-                             WHERE ts.id = (
-                                SELECT tps.transaction_id 
-                                FROM transaction_payments as tps 
-                                WHERE tps.parent_id = tp.id 
-                                LIMIT 1
-                             )
+                            IF(tp.payment_for IS NOT NULL,
+                                (SELECT CONCAT(COALESCE(CONCAT(c.supplier_business_name, '<br>'), ''), c.name) FROM contacts c WHERE c.id = tp.payment_for),
+                                (SELECT c.name 
+                                 FROM transactions as ts
+                                 JOIN contacts as c ON ts.contact_id = c.id 
+                                 WHERE ts.id = (
+                                    SELECT tps.transaction_id 
+                                    FROM transaction_payments as tps 
+                                    WHERE tps.parent_id = tp.id 
+                                    LIMIT 1
+                                 )
+                                )
                             ), 
                             CONCAT(COALESCE(CONCAT(c.supplier_business_name, '<br>'), ''), c.name)
                         ) as customer_name
@@ -2514,9 +2537,10 @@ class ReportController extends Controller
                     LEFT JOIN contacts c ON t.contact_id = c.id
                 ) as customer_subquery"), 'transaction_payments.id', '=', 'customer_subquery.payment_id')              
                 ->where('transaction_payments.business_id', $business_id)
-                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $parent_payment_query_part) {
+                ->where(function ($q) use ($business_id, $contact_filter1, $contact_filter2, $contact_filter3, $parent_payment_query_part) {
                     $q->whereRaw("(transaction_payments.transaction_id IS NOT NULL AND t.type IN ('sell', 'opening_balance') $parent_payment_query_part $contact_filter1)")
-                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('sell', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)");
+                        ->orWhereRaw("EXISTS(SELECT * FROM transaction_payments as tp JOIN transactions ON tp.transaction_id = transactions.id WHERE transactions.type IN ('sell', 'opening_balance') AND transactions.business_id = $business_id AND tp.parent_id=transaction_payments.id $contact_filter2)")
+                        ->orWhereRaw("(transaction_payments.transaction_id IS NULL AND transaction_payments.payment_for IS NOT NULL AND c_payment_for.type IN ('customer', 'both') AND (transaction_payments.payment_type IN ('credit', 'debit') OR transaction_payments.is_advance = 1) $parent_payment_query_part $contact_filter3)");
                 })
                 ->select(
                     'customer_subquery.customer_name as customer',
@@ -2546,15 +2570,24 @@ class ReportController extends Controller
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
-                $query->whereIn('t.location_id', $permitted_locations);
+                $query->where(function ($q) use ($permitted_locations) {
+                    $q->whereIn('t.location_id', $permitted_locations)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($request->get('customer_group_id'))) {
-                $query->where('CG.id', $request->get('customer_group_id'));
+                $query->where(function ($q) use ($request) {
+                    $q->where('CG.id', $request->get('customer_group_id'))
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
 
             if (! empty($location_id)) {
-                $query->where('t.location_id', $location_id);
+                $query->where(function ($q) use ($location_id) {
+                    $q->where('t.location_id', $location_id)
+                        ->orWhereNull('transaction_payments.transaction_id');
+                });
             }
             if (! empty($request->has('commission_agent'))) {
                 $query->where('t.commission_agent', $request->get('commission_agent'));

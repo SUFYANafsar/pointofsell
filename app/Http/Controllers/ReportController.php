@@ -1350,6 +1350,16 @@ class ReportController extends Controller
                 ];
             }
 
+            if ($commsn_calculation_type == 'product_value') {
+                $product_commission_details = $this->transactionUtil->getTotalProductValueCommission($business_id, $start_date, $end_date, $location_id, $commission_agent);
+
+                // Commission is already calculated in the method based on product_custom_field2
+                return ['total_sales_with_commission' => $product_commission_details['total_sales_with_commission'] ?? 0,
+                    'total_commission' => $product_commission_details['total_commission'] ?? 0,
+                    'commission_percentage' => $commission_percentage,
+                ];
+            }
+
             $sell_details = $this->transactionUtil->getTotalSellCommission($business_id, $start_date, $end_date, $location_id, $commission_agent);
 
             //Get Commision

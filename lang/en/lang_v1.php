@@ -1309,6 +1309,7 @@ return [
     'disable' => 'Disable',
     'cmmsn_calculation_type' => 'Commission Calculation Type',
     'invoice_value' => 'Invoice value',
+    'product_value' => 'Product value',
     'total_payment_with_commsn' => 'Total payment with commission',
     'payments_with_cmmsn' => 'Payments with commission',
     'view_all_drafts' => 'View all drafts',

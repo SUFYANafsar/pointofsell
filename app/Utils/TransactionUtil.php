@@ -4069,6 +4069,80 @@ class TransactionUtil extends Util
         return $output;
     }
 
+    public function getTotalProductValueCommission($business_id, $start_date = null, $end_date = null, $location_id = null, $commission_agent = null)
+    {
+        //Query to get sell lines with products to calculate commission based on product_custom_field2
+        $query = TransactionSellLine::leftjoin('transactions as t', 'transaction_sell_lines.transaction_id', '=', 't.id')
+                            ->leftjoin('variations as v', 'transaction_sell_lines.variation_id', '=', 'v.id')
+                            ->leftjoin('products as p', 'v.product_id', '=', 'p.id')
+                            ->where('t.business_id', $business_id)
+                            ->where('t.type', 'sell')
+                            ->where('t.status', 'final')
+                            ->select(
+                                'transaction_sell_lines.quantity',
+                                'transaction_sell_lines.quantity_returned',
+                                'transaction_sell_lines.unit_price',
+                                'p.product_custom_field2'
+                            );
+
+        //Check for permitted locations of a user
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('t.location_id', $permitted_locations);
+        }
+
+        if (! empty($start_date) && ! empty($end_date)) {
+            $query->whereBetween(DB::raw('date(t.transaction_date)'), [$start_date, $end_date]);
+        }
+
+        //Filter by the location
+        if (! empty($location_id)) {
+            $query->where('t.location_id', $location_id);
+        }
+
+        if (! empty($commission_agent)) {
+            $query->where('t.commission_agent', $commission_agent);
+        }
+
+        $sell_lines = $query->get();
+
+        $total_commission = 0;
+
+        foreach ($sell_lines as $line) {
+            if (empty($line->product_custom_field2)) {
+                continue;
+            }
+
+            $qty = $line->quantity - $line->quantity_returned;
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $unit_price = $line->unit_price;
+            $custom_field_value = trim($line->product_custom_field2);
+
+            // Check if it's a percentage value (ends with %)
+            if (substr($custom_field_value, -1) === '%') {
+                // Remove % and convert to number
+                $percentage = $this->num_uf(rtrim($custom_field_value, '%'));
+                // Calculate commission: (percentage / 100) * (qty * price)
+                $commission = ($percentage / 100) * ($qty * $unit_price);
+            } else {
+                // It's a fixed value per unit
+                $fixed_value = $this->num_uf($custom_field_value);
+                // Calculate commission: fixed_value * qty
+                $commission = $fixed_value * $qty;
+            }
+
+            $total_commission += $commission;
+        }
+
+        $output['total_commission'] = $total_commission;
+        $output['total_sales_with_commission'] = $total_commission; // For consistency with other methods
+
+        return $output;
+    }
+
     /**
      * Add Sell transaction
      *

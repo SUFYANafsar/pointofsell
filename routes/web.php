@@ -276,6 +276,8 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/reports/tax-report', [ReportController::class, 'getTaxReport']);
     Route::get('/reports/tax-details', [ReportController::class, 'getTaxDetails']);
     Route::get('/reports/trending-products', [ReportController::class, 'getTrendingProducts']);
+    Route::get('/reports/location-wise-sales', [ReportController::class, 'getLocationWiseSales']);
+    Route::get('/reports/location-wise-sales-ajax', [ReportController::class, 'getLocationWiseSalesAjax']);
     Route::get('/reports/expense-report', [ReportController::class, 'getExpenseReport']);
     Route::get('/reports/stock-adjustment-report', [ReportController::class, 'getStockAdjustmentReport']);
     Route::get('/reports/register-report', [ReportController::class, 'getRegisterReport']);

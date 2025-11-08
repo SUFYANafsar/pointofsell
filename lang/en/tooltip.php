@@ -31,6 +31,8 @@ return [
 
     'top_trending_products' => "Top selling products of your shop. <br/><small class='text-muted'>Apply filters to know trending products for specific Category, Brand, Business Location etc.</small>",
 
+    'location_wise_sales' => "Sales data grouped by business location. <br/><small class='text-muted'>Shows total number of invoices and total sell value for each location. Chart auto-refreshes every 10 seconds.</small>",
+
     'sku' => "Unique product id or Stock Keeping Unit <br><br>Keep it blank to automatically generate sku.<br><small class='text-muted'>You can modify sku prefix in Business settings.</small>",
 
     'enable_stock' => "Enable or disable stock management for a product. <br><br><small class='text-muted'>Stock Management should be disable mostly for services. Example: Hair-Cutting, Repairing, etc.</small>",

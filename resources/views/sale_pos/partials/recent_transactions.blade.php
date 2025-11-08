@@ -8,8 +8,14 @@
 @endif
 
 @if(!empty($transactions))
+	@php
+		$total_amount = 0;
+	@endphp
 	<table class="table">
 		@foreach ($transactions as $transaction)
+			@php
+				$total_amount += $transaction->final_total;
+			@endphp
 			<tr class="cursor-pointer" 
 	    		title="Customer: {{$transaction->contact?->name}} 
 		    		@if(!empty($transaction->contact->mobile) && $transaction->contact->is_default == 0)
@@ -57,6 +63,15 @@
 				</td>
 			</tr>
 		@endforeach
+		<tr class="success" style="font-weight: bold;">
+			<td colspan="2" class="text-right">
+				<strong>@lang('sale.total'):</strong>
+			</td>
+			<td class="display_currency">
+				<strong>{{ $total_amount }}</strong>
+			</td>
+			<td></td>
+		</tr>
 	</table>
 @else
 	<p>@lang('sale.no_recent_transactions')</p>

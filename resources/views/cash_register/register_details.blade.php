@@ -95,6 +95,10 @@
         padding: 0;
         overflow: visible!important;
     }
+    .product-details-page-break {
+        page-break-before: always;
+        break-before: page;
+    }
 }
 </style>
 <script>

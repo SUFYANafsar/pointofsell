@@ -379,6 +379,12 @@
 	</div>
 @endif
 
+<div class="row" style="margin-top: 10px;">
+	<div class="col-xs-12 text-center">
+		<small>For software please contact Sufyan: 03325008992</small>
+	</div>
+</div>
+
 			</td>
 		</tr>
 	</tbody>

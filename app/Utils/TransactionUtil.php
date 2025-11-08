@@ -6687,4 +6687,169 @@ class TransactionUtil extends Util
 
         return $discount_amount;
     }
+
+    /**
+     * Gives list of location-wise sales
+     *
+     * @param  int  $business_id
+     * @param  array  $filters
+     * @param  string  $commission_calculation_type
+     * @return Obj
+     */
+    public function getLocationWiseSales($business_id, $filters = [], $commission_calculation_type = 'invoice_value')
+    {
+        $query = Transaction::join(
+            'business_locations as bl',
+            'transactions.location_id',
+            '=',
+            'bl.id'
+        )
+                    ->leftJoin('users as u', 'transactions.commission_agent', '=', 'u.id')
+                    ->where('transactions.business_id', $business_id)
+                    ->where('transactions.type', 'sell')
+                    ->where('transactions.status', 'final');
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('transactions.location_id', $permitted_locations);
+        }
+
+        if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
+            $query->whereBetween(DB::raw('date(transaction_date)'), [$filters['start_date'],
+                $filters['end_date'], ]);
+        }
+
+        // Calculate commission based on calculation type
+        $commission_select = '';
+        if ($commission_calculation_type == 'payment_received') {
+            // Join with transaction_payments for payment_received type
+            $query->leftJoin('transaction_payments as tp', function($join) use ($filters) {
+                $join->on('transactions.id', '=', 'tp.transaction_id')
+                     ->where('tp.is_return', '=', 0);
+                if (! empty($filters['start_date']) && ! empty($filters['end_date'])) {
+                    $join->whereBetween(DB::raw('date(tp.paid_on)'), [$filters['start_date'], $filters['end_date']]);
+                }
+            });
+            $commission_select = DB::raw('SUM(CASE 
+                        WHEN transactions.commission_agent IS NOT NULL 
+                        AND u.cmmsn_percent IS NOT NULL 
+                        AND u.cmmsn_percent > 0
+                        THEN (u.cmmsn_percent / 100.0) * COALESCE(IF(tp.is_return = 0, tp.amount, tp.amount*-1), 0)
+                        ELSE 0 
+                    END) as total_commission_earned');
+        } elseif ($commission_calculation_type == 'product_value') {
+            // For product_value, we need to calculate based on product_custom_field2
+            // This is complex, so we'll calculate it after fetching
+            $commission_select = DB::raw('0 as total_commission_earned');
+        } else {
+            // Default: invoice_value
+            $commission_select = DB::raw('SUM(CASE 
+                        WHEN transactions.commission_agent IS NOT NULL 
+                        AND u.cmmsn_percent IS NOT NULL 
+                        AND u.cmmsn_percent > 0
+                        THEN (u.cmmsn_percent / 100.0) * transactions.final_total 
+                        ELSE 0 
+                    END) as total_commission_earned');
+        }
+
+        $locations = $query->select(
+            'bl.name as location',
+            'transactions.location_id',
+            DB::raw('COUNT(transactions.id) as total_invoices'),
+            DB::raw('SUM(transactions.final_total) as total_sell_value'),
+            DB::raw('COUNT(DISTINCT transactions.commission_agent) as total_commission_agents'),
+            DB::raw('SUM(CASE WHEN transactions.commission_agent IS NOT NULL THEN 1 ELSE 0 END) as invoices_with_commission'),
+            $commission_select
+        )->groupBy('transactions.location_id')
+                        ->orderBy('total_sell_value', 'desc')
+                        ->get();
+
+        // Calculate commission for product_value type after fetching
+        if ($commission_calculation_type == 'product_value') {
+            foreach ($locations as $location) {
+                $location_commission = $this->getTotalProductValueCommissionByLocation(
+                    $business_id,
+                    $location->location_id,
+                    $filters['start_date'] ?? null,
+                    $filters['end_date'] ?? null
+                );
+                $location->total_commission_earned = $location_commission['total_commission'] ?? 0;
+            }
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Get total product value commission for a location
+     *
+     * @param  int  $business_id
+     * @param  int  $location_id
+     * @param  string  $start_date
+     * @param  string  $end_date
+     * @return array
+     */
+    private function getTotalProductValueCommissionByLocation($business_id, $location_id, $start_date = null, $end_date = null)
+    {
+        $query = TransactionSellLine::leftjoin('transactions as t', 'transaction_sell_lines.transaction_id', '=', 't.id')
+                            ->leftjoin('variations as v', 'transaction_sell_lines.variation_id', '=', 'v.id')
+                            ->leftjoin('products as p', 'v.product_id', '=', 'p.id')
+                            ->leftjoin('users as u', 't.commission_agent', '=', 'u.id')
+                            ->where('t.business_id', $business_id)
+                            ->where('t.type', 'sell')
+                            ->where('t.status', 'final')
+                            ->where('t.location_id', $location_id)
+                            ->whereNotNull('t.commission_agent')
+                            ->whereNotNull('p.product_custom_field2')
+                            ->select(
+                                'transaction_sell_lines.quantity',
+                                'transaction_sell_lines.quantity_returned',
+                                'transaction_sell_lines.unit_price',
+                                'p.product_custom_field2'
+                            );
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $query->whereIn('t.location_id', $permitted_locations);
+        }
+
+        if (! empty($start_date) && ! empty($end_date)) {
+            $query->whereBetween(DB::raw('date(t.transaction_date)'), [$start_date, $end_date]);
+        }
+
+        $sell_lines = $query->get();
+
+        $total_commission = 0;
+
+        foreach ($sell_lines as $line) {
+            if (empty($line->product_custom_field2)) {
+                continue;
+            }
+
+            $qty = $line->quantity - $line->quantity_returned;
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $unit_price = $line->unit_price;
+            $custom_field_value = trim($line->product_custom_field2);
+
+            // Check if it's a percentage value (ends with %)
+            if (substr($custom_field_value, -1) === '%') {
+                // Remove % and convert to number
+                $percentage = $this->num_uf(rtrim($custom_field_value, '%'));
+                // Calculate commission: (percentage / 100) * (qty * price)
+                $commission = ($percentage / 100) * ($qty * $unit_price);
+            } else {
+                // It's a fixed value per unit
+                $fixed_value = $this->num_uf($custom_field_value);
+                // Calculate commission: fixed_value * qty
+                $commission = $fixed_value * $qty;
+            }
+
+            $total_commission += $commission;
+        }
+
+        return ['total_commission' => $total_commission];
+    }
 }

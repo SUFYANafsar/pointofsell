@@ -1026,6 +1026,161 @@ class ReportController extends Controller
     }
 
     /**
+     * Shows location-wise sales report
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function getLocationWiseSales(Request $request)
+    {
+        if (! auth()->user()->can('trending_product_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        $filters = [];
+
+        $date_range = request()->input('date_range');
+
+        if (! empty($date_range)) {
+            // Handle both ~ and - separators
+            if (strpos($date_range, '~') !== false) {
+                $date_range_array = explode('~', $date_range);
+            } elseif (strpos($date_range, ' - ') !== false) {
+                $date_range_array = explode(' - ', $date_range);
+            } elseif (strpos($date_range, '-') !== false) {
+                $date_range_array = explode('-', $date_range);
+            } else {
+                $date_range_array = [$date_range, $date_range];
+            }
+            
+            if (count($date_range_array) >= 2) {
+                $filters['start_date'] = $this->transactionUtil->uf_date(trim($date_range_array[0]));
+                $filters['end_date'] = $this->transactionUtil->uf_date(trim($date_range_array[1]));
+            }
+        }
+
+        // Get commission calculation type from business settings
+        $business_details = $this->businessUtil->getDetails($business_id);
+        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+        $commission_calculation_type = empty($pos_settings['cmmsn_calculation_type']) || $pos_settings['cmmsn_calculation_type'] == 'invoice_value' ? 'invoice_value' : $pos_settings['cmmsn_calculation_type'];
+
+        $locations = $this->transactionUtil->getLocationWiseSales($business_id, $filters, $commission_calculation_type);
+
+        $invoice_values = [];
+        $sell_values = [];
+        $commission_values = [];
+        $labels = [];
+        foreach ($locations as $location) {
+            $labels[] = $location->location;
+            $invoice_values[] = (int) $location->total_invoices;
+            $sell_values[] = (float) $location->total_sell_value;
+            $commission_values[] = (float) $location->total_commission_earned;
+        }
+
+        $chart = new CommonChart;
+        $chart->labels($labels);
+        $chart->dataset(__('report.total_invoices'), 'column', $invoice_values);
+        $chart->dataset(__('report.total_sell_value'), 'column', $sell_values);
+        $chart->dataset(__('lang_v1.total_commission_earned'), 'column', $commission_values);
+        // Add line connecting the bars (trend line)
+        $line_dataset = $chart->dataset(__('report.total_sell_value') . ' (Trend)', 'line', $sell_values);
+        $line_dataset->options(['marker' => ['enabled' => true, 'radius' => 4], 'lineWidth' => 2]);
+
+        return view('report.location_wise_sales')
+                    ->with(compact('chart'));
+    }
+
+    /**
+     * Returns location-wise sales data for AJAX chart refresh
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getLocationWiseSalesAjax(Request $request)
+    {
+        if (! auth()->user()->can('trending_product_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = $request->session()->get('user.business_id');
+
+        $filters = [];
+
+        $date_range = request()->input('date_range');
+
+        if (! empty($date_range)) {
+            // Handle both ~ and - separators
+            if (strpos($date_range, '~') !== false) {
+                $date_range_array = explode('~', $date_range);
+            } elseif (strpos($date_range, ' - ') !== false) {
+                $date_range_array = explode(' - ', $date_range);
+            } elseif (strpos($date_range, '-') !== false) {
+                $date_range_array = explode('-', $date_range);
+            } else {
+                $date_range_array = [$date_range, $date_range];
+            }
+            
+            if (count($date_range_array) >= 2) {
+                $filters['start_date'] = $this->transactionUtil->uf_date(trim($date_range_array[0]));
+                $filters['end_date'] = $this->transactionUtil->uf_date(trim($date_range_array[1]));
+            }
+        }
+
+        // Get commission calculation type from business settings
+        $business_details = $this->businessUtil->getDetails($business_id);
+        $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
+        $commission_calculation_type = empty($pos_settings['cmmsn_calculation_type']) || $pos_settings['cmmsn_calculation_type'] == 'invoice_value' ? 'invoice_value' : $pos_settings['cmmsn_calculation_type'];
+
+        $locations = $this->transactionUtil->getLocationWiseSales($business_id, $filters, $commission_calculation_type);
+
+        $invoice_values = [];
+        $sell_values = [];
+        $commission_values = [];
+        $labels = [];
+        foreach ($locations as $location) {
+            $labels[] = $location->location;
+            $invoice_values[] = (int) $location->total_invoices;
+            $sell_values[] = (float) $location->total_sell_value;
+            $commission_values[] = (float) $location->total_commission_earned;
+        }
+
+        // Format data for Highcharts
+        $series = [
+            [
+                'name' => __('report.total_invoices'),
+                'type' => 'column',
+                'data' => $invoice_values
+            ],
+            [
+                'name' => __('report.total_sell_value'),
+                'type' => 'column',
+                'data' => $sell_values
+            ],
+            [
+                'name' => __('lang_v1.total_commission_earned'),
+                'type' => 'column',
+                'data' => $commission_values
+            ],
+            [
+                'name' => __('report.total_sell_value') . ' (Trend)',
+                'type' => 'line',
+                'data' => $sell_values,
+                'yAxis' => 0,
+                'marker' => [
+                    'enabled' => true,
+                    'radius' => 4
+                ],
+                'lineWidth' => 2
+            ]
+        ];
+
+        return response()->json([
+            'labels' => $labels,
+            'series' => $series
+        ]);
+    }
+
+    /**
      * Shows expense report of a business
      *
      * @return \Illuminate\Http\Response

@@ -648,6 +648,14 @@ class AdminSidebarMenu
                             );
                         }
 
+                        if (auth()->user()->can('trending_product_report.view')) {
+                            $sub->url(
+                                action([\App\Http\Controllers\ReportController::class, 'getLocationWiseSales']),
+                                __('report.location_wise_sales'),
+                                ['icon' => '', 'active' => request()->segment(2) == 'location-wise-sales']
+                            );
+                        }
+
                         if (auth()->user()->can('purchase_n_sell_report.view')) {
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'itemsReport']),

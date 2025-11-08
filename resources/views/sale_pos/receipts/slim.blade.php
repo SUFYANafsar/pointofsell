@@ -729,6 +729,10 @@
 				</p>
 			@endif
 			
+			<p class="centered" style="margin-top: 10px;">
+				<small>For software please contact Sufyan: 03325008992</small>
+			</p>
+			
         </div>
         <!-- <button id="btnPrint" class="hidden-print">Print</button>
         <script src="script.js"></script> -->
